@@ -1,46 +1,54 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, Share, Alert,
+  View, Text, StyleSheet, ScrollView, Pressable, Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { useApp } from '@/contexts/AppContext';
 import { formatCurrency, getProgressPercent } from '@/services/db';
 import { SpendingDonut, IncomeExpenseChart } from '@/components';
+import { useAlert } from '@/template';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
+// ── CSV Builder ────────────────────────────────────────────────────────────────
 function buildCSV(transactions: any[], categories: any[], accounts: any[]): string {
+  const BOM = '\uFEFF'; // UTF-8 BOM for Excel
   const header = 'Tanggal,Tipe,Deskripsi,Kategori,Akun,Nominal,Catatan';
   const rows = transactions.map((t) => {
     const cat = categories.find((c: any) => c.id === t.category_id)?.name ?? 'Lainnya';
     const acc = accounts.find((a: any) => a.id === t.account_id)?.name ?? '-';
     const date = new Date(t.date).toLocaleDateString('id-ID');
-    return [date, t.type, `"${t.description}"`, cat, acc, t.amount, `"${t.notes ?? ''}"`].join(',');
+    const desc = `"${String(t.description).replace(/"/g, '""')}"`;
+    const notes = `"${String(t.notes ?? '').replace(/"/g, '""')}"`;
+    const typeLabel = t.type === 'income' ? 'Pemasukan' : t.type === 'expense' ? 'Pengeluaran' : 'Transfer';
+    return [date, typeLabel, desc, cat, acc, t.amount, notes].join(',');
   });
-  return [header, ...rows].join('\n');
+  return BOM + [header, ...rows].join('\r\n');
 }
 
-function buildTransactionText(transactions: any[], categories: any[], accounts: any[]): string {
-  const lines = [
-    'LAPORAN TRANSAKSI VAULTOS',
-    '========================',
-    `Diekspor: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`,
-    `Total: ${transactions.length} transaksi`,
-    '',
-    ...transactions.map((t) => {
-      const cat = categories.find((c: any) => c.id === t.category_id)?.name ?? 'Lainnya';
-      const acc = accounts.find((a: any) => a.id === t.account_id)?.name ?? '-';
-      const date = new Date(t.date).toLocaleDateString('id-ID');
-      const prefix = t.type === 'income' ? '+' : t.type === 'transfer' ? '' : '-';
-      return `${date} | ${t.description} | ${cat} | ${acc} | ${prefix}${formatCurrency(t.amount, true)}`;
-    }),
-  ];
-  return lines.join('\n');
+// ── File Export ────────────────────────────────────────────────────────────────
+async function exportToFile(content: string, filename: string): Promise<void> {
+  const dir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory ?? '';
+  const uri = dir + filename;
+  await FileSystem.writeAsStringAsync(uri, content, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  const canShare = await Sharing.isAvailableAsync();
+  if (canShare) {
+    await Sharing.shareAsync(uri, {
+      mimeType: 'text/csv',
+      dialogTitle: 'Simpan atau Bagikan Laporan',
+      UTI: 'public.comma-separated-values-text',
+    });
+  }
 }
 
 export default function AnalyticsScreen() {
   const { transactions, categories, accounts, budgets, goals } = useApp();
-  const [activeTab, setActiveTab] = useState<'overview'|'transactions'|'budgets'>('overview');
+  const { showAlert } = useAlert();
+  const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'budgets'>('overview');
+  const [exporting, setExporting] = useState(false);
 
   const now = new Date();
   const currentMonthYear = now.toISOString().slice(0, 7);
@@ -50,11 +58,11 @@ export default function AnalyticsScreen() {
   const expense = thisMonthTxns.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const savings = income - expense;
 
-  // Monthly trend (last 6 months)
+  // 6-month trend
   const chartData = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const ym = d.toISOString().slice(0, 7);
-    const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     const monthTxns = transactions.filter((t) => t.date.startsWith(ym));
     return {
       month: months[d.getMonth()],
@@ -63,42 +71,46 @@ export default function AnalyticsScreen() {
     };
   });
 
-  // Spending by category
+  // Category spending
   const catSpend = categories
     .map((cat) => {
-      const val = thisMonthTxns.filter((t) => t.type === 'expense' && t.category_id === cat.id).reduce((s, t) => s + t.amount, 0);
-      return { name: cat.name, value: val, color: cat.color, percentage: expense > 0 ? Math.round((val / expense) * 100) : 0 };
+      const val = thisMonthTxns
+        .filter((t) => t.type === 'expense' && t.category_id === cat.id)
+        .reduce((s, t) => s + t.amount, 0);
+      return {
+        name: cat.name,
+        value: val,
+        color: cat.color,
+        percentage: expense > 0 ? Math.round((val / expense) * 100) : 0,
+      };
     })
     .filter((c) => c.value > 0)
     .sort((a, b) => b.value - a.value);
 
-  const handleExport = async () => {
-    try {
-      const text = buildTransactionText(transactions, categories, accounts);
-      await Share.share({
-        message: text,
-        title: 'Laporan Transaksi VaultOS',
-      });
-    } catch (e) {
-      Alert.alert('Gagal Export', 'Tidak dapat membagikan laporan.');
-    }
-  };
-
   const handleExportCSV = async () => {
+    if (transactions.length === 0) {
+      showAlert('Tidak Ada Data', 'Belum ada transaksi untuk diekspor.');
+      return;
+    }
+    setExporting(true);
     try {
       const csv = buildCSV(transactions, categories, accounts);
-      await Share.share({
-        message: csv,
-        title: 'VaultOS_Transaksi.csv',
-      });
-    } catch (e) {
-      Alert.alert('Gagal Export', 'Tidak dapat membagikan CSV.');
+      const date = now.toISOString().slice(0, 10);
+      const filename = `VaultOS_Laporan_${date}.csv`;
+      await exportToFile(csv, filename);
+    } catch (e: any) {
+      showAlert('Export Gagal', e?.message ?? 'Tidak dapat membuat file laporan.');
+    } finally {
+      setExporting(false);
     }
   };
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Summary */}
       <View style={styles.summaryRow}>
         <View style={[styles.summaryCard, { borderColor: Colors.success + '40' }]}>
@@ -114,14 +126,20 @@ export default function AnalyticsScreen() {
         <View style={[styles.summaryCard, { borderColor: Colors.primary + '40' }]}>
           <MaterialIcons name="savings" size={20} color={Colors.primary} />
           <Text style={styles.summaryLabel}>Tabungan</Text>
-          <Text style={[styles.summaryVal, { color: savings >= 0 ? Colors.primary : Colors.danger }]}>{formatCurrency(Math.abs(savings), true)}</Text>
+          <Text style={[styles.summaryVal, { color: savings >= 0 ? Colors.primary : Colors.danger }]}>
+            {formatCurrency(Math.abs(savings), true)}
+          </Text>
         </View>
       </View>
 
       {/* Tab */}
       <View style={styles.tabRow}>
-        {(['overview','transactions','budgets'] as const).map((tab) => (
-          <Pressable key={tab} style={[styles.tabBtn, activeTab === tab && styles.tabActive]} onPress={() => setActiveTab(tab)}>
+        {(['overview', 'transactions', 'budgets'] as const).map((tab) => (
+          <Pressable
+            key={tab}
+            style={[styles.tabBtn, activeTab === tab && styles.tabActive]}
+            onPress={() => setActiveTab(tab)}
+          >
             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
               {tab === 'overview' ? 'Ringkasan' : tab === 'transactions' ? 'Transaksi' : 'Anggaran'}
             </Text>
@@ -131,7 +149,6 @@ export default function AnalyticsScreen() {
 
       {activeTab === 'overview' ? (
         <>
-          {/* Income vs Expense Chart */}
           {chartData.some((d) => d.income > 0 || d.expense > 0) ? (
             <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>Tren 6 Bulan</Text>
@@ -139,7 +156,6 @@ export default function AnalyticsScreen() {
             </View>
           ) : null}
 
-          {/* Category Spending */}
           {catSpend.length > 0 ? (
             <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>Distribusi Pengeluaran Bulan Ini</Text>
@@ -155,7 +171,6 @@ export default function AnalyticsScreen() {
             </View>
           ) : null}
 
-          {/* Goals Progress */}
           {goals.length > 0 ? (
             <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>Tujuan Keuangan</Text>
@@ -174,7 +189,9 @@ export default function AnalyticsScreen() {
                       <View style={styles.progressBg}>
                         <View style={[styles.progressFill, { width: `${p}%` as any, backgroundColor: g.color }]} />
                       </View>
-                      <Text style={styles.goalAmounts}>{formatCurrency(g.current_amount, true)} / {formatCurrency(g.target_amount, true)}</Text>
+                      <Text style={styles.goalAmounts}>
+                        {formatCurrency(g.current_amount, true)} / {formatCurrency(g.target_amount, true)}
+                      </Text>
                     </View>
                   </View>
                 );
@@ -193,24 +210,30 @@ export default function AnalyticsScreen() {
       ) : activeTab === 'transactions' ? (
         <View style={styles.chartCard}>
           <Text style={styles.chartTitle}>Semua Transaksi ({transactions.length})</Text>
-          {transactions.slice(0, 50).map((t) => {
-            const cat = categories.find((c) => c.id === t.category_id);
-            const isIncome = t.type === 'income';
-            return (
-              <View key={t.id} style={styles.txnRow}>
-                <View style={[styles.txnIcon, { backgroundColor: (cat?.color ?? Colors.primary) + '20' }]}>
-                  <MaterialIcons name={(cat?.icon as any) ?? 'receipt'} size={16} color={cat?.color ?? Colors.primary} />
+          {transactions.length === 0 ? (
+            <Text style={styles.emptyText}>Belum ada transaksi</Text>
+          ) : (
+            transactions.slice(0, 100).map((t) => {
+              const cat = categories.find((c) => c.id === t.category_id);
+              const isIncome = t.type === 'income';
+              return (
+                <View key={t.id} style={styles.txnRow}>
+                  <View style={[styles.txnIcon, { backgroundColor: (cat?.color ?? Colors.primary) + '20' }]}>
+                    <MaterialIcons name={(cat?.icon as any) ?? 'receipt'} size={16} color={cat?.color ?? Colors.primary} />
+                  </View>
+                  <View style={styles.txnInfo}>
+                    <Text style={styles.txnDesc} numberOfLines={1}>{t.description}</Text>
+                    <Text style={styles.txnDate}>
+                      {new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </Text>
+                  </View>
+                  <Text style={[styles.txnAmount, { color: isIncome ? Colors.success : Colors.danger }]}>
+                    {isIncome ? '+' : '-'}{formatCurrency(t.amount, true)}
+                  </Text>
                 </View>
-                <View style={styles.txnInfo}>
-                  <Text style={styles.txnDesc} numberOfLines={1}>{t.description}</Text>
-                  <Text style={styles.txnDate}>{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
-                </View>
-                <Text style={[styles.txnAmount, { color: isIncome ? Colors.success : Colors.danger }]}>
-                  {isIncome ? '+' : '-'}{formatCurrency(t.amount, true)}
-                </Text>
-              </View>
-            );
-          })}
+              );
+            })
+          )}
         </View>
       ) : (
         <View style={styles.chartCard}>
@@ -219,17 +242,25 @@ export default function AnalyticsScreen() {
             <Text style={styles.emptyText}>Belum ada anggaran untuk bulan ini</Text>
           ) : (
             budgets.map((b) => {
-              const cat = categories.find((c) => c.id === b.category_id);
-              const spent = thisMonthTxns.filter((t) => t.type === 'expense' && t.category_id === b.category_id).reduce((s, t) => s + t.amount, 0);
+              const spent = thisMonthTxns
+                .filter((t) => t.type === 'expense' && t.category_id === b.category_id)
+                .reduce((s, t) => s + t.amount, 0);
               const pct = getProgressPercent(spent, b.budget_limit);
               return (
                 <View key={b.id} style={styles.budgetRow}>
                   <View style={styles.budgetInfo}>
                     <Text style={styles.budgetName}>{b.name}</Text>
-                    <Text style={styles.budgetAmounts}>{formatCurrency(spent, true)} / {formatCurrency(b.budget_limit, true)}</Text>
+                    <Text style={styles.budgetAmounts}>
+                      {formatCurrency(spent, true)} / {formatCurrency(b.budget_limit, true)}
+                    </Text>
                   </View>
                   <View style={styles.budgetBarBg}>
-                    <View style={[styles.budgetBarFill, { width: `${Math.min(100, pct)}%` as any, backgroundColor: pct > 100 ? Colors.danger : b.color }]} />
+                    <View
+                      style={[
+                        styles.budgetBarFill,
+                        { width: `${Math.min(100, pct)}%` as any, backgroundColor: pct > 100 ? Colors.danger : b.color },
+                      ]}
+                    />
                   </View>
                 </View>
               );
@@ -238,19 +269,29 @@ export default function AnalyticsScreen() {
         </View>
       )}
 
-      {/* Export Buttons */}
+      {/* Export Section */}
       <View style={styles.exportSection}>
-        <Text style={styles.exportTitle}>Ekspor Laporan</Text>
-        <View style={styles.exportRow}>
-          <Pressable style={({ pressed }) => [styles.exportBtn, pressed && styles.pressed]} onPress={handleExport}>
-            <MaterialIcons name="share" size={18} color={Colors.primary} />
-            <Text style={styles.exportBtnText}>Bagikan Laporan</Text>
-          </Pressable>
-          <Pressable style={({ pressed }) => [styles.exportBtn, pressed && styles.pressed]} onPress={handleExportCSV}>
-            <MaterialIcons name="table-chart" size={18} color={Colors.success} />
-            <Text style={[styles.exportBtnText, { color: Colors.success }]}>Export CSV</Text>
-          </Pressable>
-        </View>
+        <Text style={styles.exportTitle}>Ekspor Laporan Keuangan</Text>
+        <Text style={styles.exportSubtitle}>
+          File CSV kompatibel dengan Microsoft Excel, Google Sheets, dan Numbers.
+        </Text>
+        <Pressable
+          style={({ pressed }) => [styles.exportBtn, pressed && styles.pressed, exporting && styles.exportBtnDisabled]}
+          onPress={handleExportCSV}
+          disabled={exporting}
+        >
+          <MaterialIcons name="table-chart" size={22} color={exporting ? Colors.textDisabled : '#fff'} />
+          <View>
+            <Text style={[styles.exportBtnTitle, exporting && { color: Colors.textDisabled }]}>
+              {exporting ? 'Membuat File...' : 'Download Laporan Excel/CSV'}
+            </Text>
+            <Text style={styles.exportBtnSub}>{transactions.length} transaksi · semua waktu</Text>
+          </View>
+          {exporting ? null : <MaterialIcons name="download" size={18} color="rgba(255,255,255,0.7)" style={styles.downloadIcon} />}
+        </Pressable>
+        <Text style={styles.exportNote}>
+          File akan disimpan dan dapat dibuka langsung di aplikasi spreadsheet.
+        </Text>
       </View>
 
       <View style={{ height: Spacing.xxl }} />
@@ -303,8 +344,20 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: Typography.sm, color: Colors.textMuted, textAlign: 'center' },
   exportSection: { gap: Spacing.md },
   exportTitle: { fontSize: Typography.md, fontWeight: Typography.semibold, color: Colors.text },
-  exportRow: { flexDirection: 'row', gap: Spacing.md },
-  exportBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.base, borderWidth: 1, borderColor: Colors.border, height: 52 },
-  exportBtnText: { fontSize: Typography.sm, fontWeight: Typography.semibold, color: Colors.primary },
-  pressed: { opacity: 0.7 },
+  exportSubtitle: { fontSize: Typography.xs, color: Colors.textMuted, lineHeight: 18 },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.success,
+    borderRadius: Radius.lg,
+    padding: Spacing.base,
+    paddingVertical: Spacing.md,
+  },
+  exportBtnDisabled: { backgroundColor: Colors.cardElevated },
+  exportBtnTitle: { fontSize: Typography.sm, fontWeight: Typography.bold, color: '#fff' },
+  exportBtnSub: { fontSize: Typography.xs, color: 'rgba(255,255,255,0.7)', marginTop: 1 },
+  downloadIcon: { marginLeft: 'auto' },
+  exportNote: { fontSize: Typography.xs, color: Colors.textMuted, textAlign: 'center', fontStyle: 'italic' },
+  pressed: { opacity: 0.8 },
 });

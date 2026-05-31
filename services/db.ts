@@ -112,7 +112,28 @@ export async function fetchTransactions(userId: string, limit?: number): Promise
 export async function createTransaction(txn: Omit<Transaction, 'id'>): Promise<Transaction> {
   const { data, error } = await sb().from('transactions').insert(txn).select().single();
   if (error) throw error;
-  return data as Transaction;
+  const created = data as Transaction;
+
+  // Update account balance(s) after transaction
+  if (created.account_id) {
+    const { data: acc } = await sb().from('accounts').select('balance').eq('id', created.account_id).single();
+    if (acc) {
+      let newBalance = acc.balance;
+      if (created.type === 'income') newBalance += created.amount;
+      else if (created.type === 'expense') newBalance -= created.amount;
+      else if (created.type === 'transfer') newBalance -= created.amount;
+      await sb().from('accounts').update({ balance: newBalance }).eq('id', created.account_id);
+    }
+  }
+  // For transfers, credit the destination account
+  if (created.type === 'transfer' && created.to_account_id) {
+    const { data: toAcc } = await sb().from('accounts').select('balance').eq('id', created.to_account_id).single();
+    if (toAcc) {
+      await sb().from('accounts').update({ balance: toAcc.balance + created.amount }).eq('id', created.to_account_id);
+    }
+  }
+
+  return created;
 }
 
 export async function deleteTransaction(id: string): Promise<void> {

@@ -20,7 +20,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     return null;
   }
 
-  // Set up Android notification channel
+  // Set up Android notification channels
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('vaultos-default', {
       name: 'VaultOS Notifikasi',
@@ -59,9 +59,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 
   try {
-    const token = (await Notifications.getExpoPushTokenAsync({
-      projectId: 'vaultos-app',
-    })).data;
+    const token = (await Notifications.getExpoPushTokenAsync()).data;
     return token;
   } catch (e) {
     console.log('Could not get push token:', e);
@@ -78,7 +76,7 @@ export async function savePushToken(userId: string, token: string): Promise<void
   }
 }
 
-// ── Schedule local notifications ───────────────────────────────────────────────
+// ── Schedule local event reminder ───────────────────────────────────────────────
 export async function scheduleEventReminder(
   eventId: string,
   title: string,
@@ -98,7 +96,7 @@ export async function scheduleEventReminder(
         sound: 'default',
         vibrate: [0, 300, 200, 300],
         data: { type: 'event_reminder', eventId },
-        categoryIdentifier: 'vaultos-reminders',
+        ...(Platform.OS === 'android' ? { channelId: 'vaultos-reminders' } : {}),
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -115,11 +113,57 @@ export async function scheduleEventReminder(
 export async function cancelEventReminder(eventId: string): Promise<void> {
   try {
     await Notifications.cancelScheduledNotificationAsync(`event-${eventId}`);
-  } catch (e) {
+  } catch (_e) {
     // Ignore
   }
 }
 
+// ── Schedule a repeating interval notification (e.g. every 5 minutes) ────────
+export async function scheduleRepeatingReminder(
+  identifier: string,
+  title: string,
+  body: string,
+  intervalSeconds: number
+): Promise<string | null> {
+  try {
+    // Cancel any existing one with same identifier first
+    await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {});
+
+    // Schedule the first occurrence after intervalSeconds
+    const firstTriggerDate = new Date(Date.now() + intervalSeconds * 1000);
+
+    const id = await Notifications.scheduleNotificationAsync({
+      identifier,
+      content: {
+        title,
+        body,
+        sound: 'default',
+        vibrate: [0, 200, 100, 200],
+        data: { type: 'repeating', identifier },
+        ...(Platform.OS === 'android' ? { channelId: 'vaultos-reminders' } : {}),
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: intervalSeconds,
+        repeats: true,
+      },
+    });
+    return id;
+  } catch (e) {
+    console.log('Could not schedule repeating notification:', e);
+    return null;
+  }
+}
+
+export async function cancelRepeatingReminder(identifier: string): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(identifier);
+  } catch (_e) {
+    // Ignore
+  }
+}
+
+// ── Send immediate local notification ──────────────────────────────────────────
 export async function sendLocalNotification(
   title: string,
   body: string,
@@ -132,6 +176,7 @@ export async function sendLocalNotification(
       sound: 'default',
       vibrate: [0, 200],
       data: data ?? {},
+      ...(Platform.OS === 'android' ? { channelId: 'vaultos-default' } : {}),
     },
     trigger: null, // Show immediately
   });
@@ -148,6 +193,7 @@ export async function scheduleBudgetAlert(
       sound: 'default',
       vibrate: [0, 300],
       data: { type: 'budget_alert', category },
+      ...(Platform.OS === 'android' ? { channelId: 'vaultos-finance' } : {}),
     },
     trigger: null,
   });

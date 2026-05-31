@@ -150,11 +150,7 @@ export default function BudgetScreen() {
           </View>
         )}
 
-        {/* Add Budget CTA */}
-        <Pressable style={({ pressed }) => [styles.addBudget, pressed && { opacity: 0.7 }]}>
-          <MaterialIcons name="add-circle" size={22} color={Colors.primary} />
-          <Text style={styles.addBudgetText}>Tambah Anggaran Baru (Segera Hadir)</Text>
-        </Pressable>
+
 
         <View style={styles.bottomPad} />
       </ScrollView>

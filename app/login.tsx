@@ -172,9 +172,7 @@ function LoginContent() {
             </Pressable>
           ) : null}
 
-          <Text style={styles.disclaimer}>
-            VaultOS — Data kamu disimpan dengan aman dan terenkripsi
-          </Text>
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

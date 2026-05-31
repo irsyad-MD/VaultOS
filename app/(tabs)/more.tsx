@@ -181,11 +181,7 @@ export default function MoreScreen() {
           </View>
         ))}
 
-        <View style={styles.appInfo}>
-          <Text style={styles.appName}>VaultOS</Text>
-          <Text style={styles.appVersion}>v2.0.0 — Real Data Edition</Text>
-          <Text style={styles.appTagline}>Manage your life, one vault at a time.</Text>
-        </View>
+
 
         <View style={styles.bottomPad} />
       </ScrollView>

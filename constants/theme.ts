@@ -46,6 +46,7 @@ export const Colors = {
   cyan: '#06b6d4',
   pink: '#ec4899',
   orange: '#f97316',
+  orangeSurface: '#f9731615',
   teal: '#14b8a6',
 
   // Chart colors
