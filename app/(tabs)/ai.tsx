@@ -16,6 +16,26 @@ interface AnalysisResult {
   timestamp: Date;
 }
 
+// Parse inline markdown: **bold**, *italic*
+function parseInline(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+  let last = 0;
+  let match;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) parts.push(<Text key={key++}>{text.slice(last, match.index)}</Text>);
+    if (match[1] !== undefined) {
+      parts.push(<Text key={key++} style={{ fontWeight: '700', color: Colors.text }}>{match[1]}</Text>);
+    } else if (match[2] !== undefined) {
+      parts.push(<Text key={key++} style={{ fontStyle: 'italic' }}>{match[2]}</Text>);
+    }
+    last = regex.lastIndex;
+  }
+  if (last < text.length) parts.push(<Text key={key++}>{text.slice(last)}</Text>);
+  return parts;
+}
+
 // Parse markdown-ish content into sections
 function parseContent(text: string): { heading: string; body: string }[] {
   const sections: { heading: string; body: string }[] = [];
@@ -207,18 +227,19 @@ export default function AIScreen() {
                 <View key={idx} style={styles.section}>
                   {section.heading ? (
                     <Text style={[styles.sectionHeading, { color: getRatingColor(section.heading + section.body) }]}>
-                      {section.heading}
+                      {parseInline(section.heading)}
                     </Text>
                   ) : null}
                   {section.body.split('\n').map((line, li) => {
                     const trimmed = line.trim();
                     if (!trimmed) return null;
-                    const isBullet = trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*');
+                    const isBullet = trimmed.startsWith('-') || trimmed.startsWith('•') || (trimmed.startsWith('*') && !trimmed.startsWith('**'));
+                    const cleanLine = isBullet ? trimmed.replace(/^[-•*]\s*/, '') : trimmed;
                     return (
-                      <View key={li} style={isBullet ? styles.bulletRow : null}>
+                      <View key={li} style={isBullet ? styles.bulletRow : styles.bodyRow}>
                         {isBullet ? <View style={styles.bulletDot} /> : null}
                         <Text style={[styles.sectionBody, isBullet && styles.bulletText]}>
-                          {isBullet ? trimmed.replace(/^[-•*]\s*/, '') : trimmed}
+                          {parseInline(cleanLine)}
                         </Text>
                       </View>
                     );
@@ -279,7 +300,9 @@ export default function AIScreen() {
                   </View>
                   <Text style={styles.chatAnswerLabel}>Sydz Agents</Text>
                 </View>
-                <Text style={styles.chatAnswerText}>{chatAnswer}</Text>
+                <Text style={styles.chatAnswerText}>
+                  {parseInline(chatAnswer)}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -342,6 +365,8 @@ const styles = StyleSheet.create({
   sectionHeading: { fontSize: Typography.sm, fontWeight: Typography.bold, letterSpacing: -0.2 },
   sectionBody: { fontSize: Typography.sm, color: Colors.textSecondary, lineHeight: 22 },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
+  bodyRow: {},
+  inlineBold: { fontWeight: '700', color: Colors.text },
   bulletDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primary, marginTop: 8, flexShrink: 0 },
   bulletText: { flex: 1 },
   chatCard: { marginHorizontal: Spacing.base, backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.base, borderWidth: 1, borderColor: Colors.border, gap: Spacing.md },

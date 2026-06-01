@@ -91,10 +91,9 @@ export async function scheduleEventReminder(
     const id = await Notifications.scheduleNotificationAsync({
       identifier: `event-${eventId}`,
       content: {
-        title: `Pengingat: ${title}`,
-        body: `${reminderMinutes} menit lagi`,
+        title: `⏰ Pengingat: ${title}`,
+        body: `Jadwal dimulai ${reminderMinutes >= 60 ? `${reminderMinutes / 60} jam` : `${reminderMinutes} menit`} lagi`,
         sound: 'default',
-        vibrate: [0, 300, 200, 300],
         data: { type: 'event_reminder', eventId },
         ...(Platform.OS === 'android' ? { channelId: 'vaultos-reminders' } : {}),
       },
@@ -138,7 +137,6 @@ export async function scheduleRepeatingReminder(
         title,
         body,
         sound: 'default',
-        vibrate: [0, 200, 100, 200],
         data: { type: 'repeating', identifier },
         ...(Platform.OS === 'android' ? { channelId: 'vaultos-reminders' } : {}),
       },
@@ -174,11 +172,10 @@ export async function sendLocalNotification(
       title,
       body,
       sound: 'default',
-      vibrate: [0, 200],
       data: data ?? {},
       ...(Platform.OS === 'android' ? { channelId: 'vaultos-default' } : {}),
     },
-    trigger: null, // Show immediately
+    trigger: null,
   });
 }
 
@@ -188,10 +185,9 @@ export async function scheduleBudgetAlert(
 ): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `Anggaran ${category} Hampir Habis`,
+      title: `⚠️ Anggaran ${category} Hampir Habis`,
       body: `Kamu sudah menggunakan ${percent}% dari anggaran ${category}`,
       sound: 'default',
-      vibrate: [0, 300],
       data: { type: 'budget_alert', category },
       ...(Platform.OS === 'android' ? { channelId: 'vaultos-finance' } : {}),
     },
