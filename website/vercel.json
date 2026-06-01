@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/auth/confirm", "destination": "/auth/confirm.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
