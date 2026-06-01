@@ -5,6 +5,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, withSpring, Easing,
+} from 'react-native-reanimated';
+import { useEffect } from 'react';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { useApp } from '@/contexts/AppContext';
 import { formatCurrency, getProgressPercent } from '@/services/db';
@@ -34,6 +38,16 @@ const MENU_SECTIONS = [
   },
 ];
 
+function useFadeSlide(delay = 0) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 18, stiffness: 120 }));
+  }, []);
+  return useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ translateY: translateY.value }] }));
+}
+
 export default function MoreScreen() {
   const router = useRouter();
   const { habits, habitCompletions, toggleHabit, goals, loading } = useApp();
@@ -41,19 +55,25 @@ export default function MoreScreen() {
   const today = new Date().toISOString().split('T')[0];
   const completedToday = habitCompletions.filter((c) => c.completed_date === today).map((c) => c.habit_id);
   const completionRate = habits.length > 0 ? Math.round((completedToday.length / habits.length) * 100) : 0;
-
   const totalSaved = goals.reduce((s, g) => s + g.current_amount, 0);
   const totalTarget = goals.reduce((s, g) => s + g.target_amount, 0);
+
+  const headerAnim = useFadeSlide(0);
+  const habitsAnim = useFadeSlide(80);
+  const goalsAnim = useFadeSlide(160);
+  const menuAnim = useFadeSlide(240);
+  const watermarkAnim = useFadeSlide(340);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={styles.header}>
+
+        <Animated.View style={[styles.header, headerAnim]}>
           <Text style={styles.title}>Lainnya</Text>
-        </View>
+        </Animated.View>
 
         {/* Today Habits Preview */}
-        <View style={styles.section}>
+        <Animated.View style={[styles.section, habitsAnim]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Kebiasaan Hari Ini</Text>
             <Pressable onPress={() => router.push('/habits')}><Text style={styles.seeAll}>Lihat semua</Text></Pressable>
@@ -66,7 +86,6 @@ export default function MoreScreen() {
                 <Text style={styles.habitRateLabel}>{completedToday.length}/{habits.length} selesai hari ini</Text>
               </View>
             </View>
-
             {habits.length === 0 ? (
               <Pressable style={styles.addHabitHint} onPress={() => router.push('/add-habit')}>
                 <MaterialIcons name="add-circle-outline" size={18} color={Colors.purple} />
@@ -100,15 +119,14 @@ export default function MoreScreen() {
               })
             )}
           </View>
-        </View>
+        </Animated.View>
 
         {/* Goals Preview */}
-        <View style={styles.section}>
+        <Animated.View style={[styles.section, goalsAnim]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Tujuan Keuangan</Text>
             <Pressable onPress={() => router.push('/goals')}><Text style={styles.seeAll}>Lihat semua</Text></Pressable>
           </View>
-
           {goals.length === 0 ? (
             <Pressable style={styles.addGoalHint} onPress={() => router.push('/add-goal')}>
               <MaterialIcons name="savings" size={32} color={Colors.textDisabled} />
@@ -131,7 +149,6 @@ export default function MoreScreen() {
                 </View>
                 <DonutChart progress={getProgressPercent(totalSaved, totalTarget)} color={Colors.success} size={60} />
               </View>
-
               {goals.slice(0, 3).map((goal) => {
                 const progress = getProgressPercent(goal.current_amount, goal.target_amount);
                 return (
@@ -155,57 +172,55 @@ export default function MoreScreen() {
               })}
             </>
           )}
-        </View>
+        </Animated.View>
 
         {/* Menu Sections */}
-        {/* Add Category shortcut */}
-        <View style={styles.section}>
-          <Text style={styles.menuSectionTitle}>Kategori</Text>
-          <View style={styles.menuCard}>
-            <Pressable
-              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-              onPress={() => router.push('/add-category' as any)}
-            >
-              <View style={[styles.menuIcon, { backgroundColor: Colors.primary + '20' }]}>
-                <MaterialIcons name="category" size={20} color={Colors.primary} />
-              </View>
-              <Text style={styles.menuLabel}>Tambah Kategori</Text>
-              <MaterialIcons name="chevron-right" size={18} color={Colors.textMuted} />
-            </Pressable>
-          </View>
-        </View>
-
-        {MENU_SECTIONS.map((section) => (
-          <View key={section.title} style={styles.section}>
-            <Text style={styles.menuSectionTitle}>{section.title}</Text>
+        <Animated.View style={menuAnim}>
+          <View style={styles.section}>
+            <Text style={styles.menuSectionTitle}>Kategori</Text>
             <View style={styles.menuCard}>
-              {section.items.map((item, idx) => (
-                <React.Fragment key={item.id}>
-                  <Pressable
-                    style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
-                    onPress={() => { if (item.route) router.push(item.route as any); }}
-                  >
-                    <View style={[styles.menuIcon, { backgroundColor: item.color + '20' }]}>
-                      <MaterialIcons name={item.icon as any} size={20} color={item.color} />
-                    </View>
-                    <Text style={styles.menuLabel}>{item.label}</Text>
-                    <MaterialIcons name="chevron-right" size={18} color={Colors.textMuted} />
-                  </Pressable>
-                  {idx < section.items.length - 1 ? <View style={styles.menuDivider} /> : null}
-                </React.Fragment>
-              ))}
+              <Pressable
+                style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+                onPress={() => router.push('/add-category' as any)}
+              >
+                <View style={[styles.menuIcon, { backgroundColor: Colors.primary + '20' }]}>
+                  <MaterialIcons name="category" size={20} color={Colors.primary} />
+                </View>
+                <Text style={styles.menuLabel}>Tambah Kategori</Text>
+                <MaterialIcons name="chevron-right" size={18} color={Colors.textMuted} />
+              </Pressable>
             </View>
           </View>
-        ))}
 
+          {MENU_SECTIONS.map((section) => (
+            <View key={section.title} style={styles.section}>
+              <Text style={styles.menuSectionTitle}>{section.title}</Text>
+              <View style={styles.menuCard}>
+                {section.items.map((item, idx) => (
+                  <React.Fragment key={item.id}>
+                    <Pressable
+                      style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+                      onPress={() => { if (item.route) router.push(item.route as any); }}
+                    >
+                      <View style={[styles.menuIcon, { backgroundColor: item.color + '20' }]}>
+                        <MaterialIcons name={item.icon as any} size={20} color={item.color} />
+                      </View>
+                      <Text style={styles.menuLabel}>{item.label}</Text>
+                      <MaterialIcons name="chevron-right" size={18} color={Colors.textMuted} />
+                    </Pressable>
+                    {idx < section.items.length - 1 ? <View style={styles.menuDivider} /> : null}
+                  </React.Fragment>
+                ))}
+              </View>
+            </View>
+          ))}
+        </Animated.View>
 
-
-        {/* Watermark */}
-        <View style={styles.watermarkSection}>
+        <Animated.View style={[styles.watermarkSection, watermarkAnim]}>
           <Text style={styles.appName}>VaultOS</Text>
           <Text style={styles.appTagline}>Manage your life, one vault at a time</Text>
           <Text style={styles.watermark}>by ImsyadDeveloper</Text>
-        </View>
+        </Animated.View>
 
         <View style={styles.bottomPad} />
       </ScrollView>

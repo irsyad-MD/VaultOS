@@ -1,10 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, withSpring, Easing,
+} from 'react-native-reanimated';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { useApp } from '@/contexts/AppContext';
 
@@ -23,6 +26,16 @@ function buildCalendarDays(year: number, month: number) {
   return days;
 }
 
+function useFadeSlide(delay = 0) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 400, easing: Easing.out(Easing.cubic) }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 18, stiffness: 120 }));
+  }, []);
+  return useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ translateY: translateY.value }] }));
+}
+
 export default function CalendarScreen() {
   const router = useRouter();
   const { events, tasks, updateTaskStatus, removeEvent, removeTask } = useApp();
@@ -33,6 +46,11 @@ export default function CalendarScreen() {
   const [selectedDate, setSelectedDate] = useState(today.toISOString().split('T')[0]);
   const [activeTab, setActiveTab] = useState<'schedule' | 'tasks'>('schedule');
   const [showMonthPicker, setShowMonthPicker] = useState(false);
+
+  const headerAnim = useFadeSlide(0);
+  const calAnim = useFadeSlide(80);
+  const tabsAnim = useFadeSlide(160);
+  const listAnim = useFadeSlide(240);
 
   const calDays = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth]);
 
@@ -84,15 +102,15 @@ export default function CalendarScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
 
         {/* Header */}
-        <View style={styles.header}>
+        <Animated.View style={[styles.header, headerAnim]}>
           <View>
             <Text style={styles.title}>Jadwal & Tugas</Text>
             <Text style={styles.subtitle}>{today.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</Text>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Month Navigation */}
-        <View style={styles.monthNav}>
+        <Animated.View style={[styles.monthNav, calAnim]}>
           <Pressable style={styles.monthNavBtn} onPress={prevMonth}>
             <MaterialIcons name="chevron-left" size={22} color={Colors.text} />
           </Pressable>
@@ -103,10 +121,10 @@ export default function CalendarScreen() {
           <Pressable style={styles.monthNavBtn} onPress={nextMonth}>
             <MaterialIcons name="chevron-right" size={22} color={Colors.text} />
           </Pressable>
-        </View>
+        </Animated.View>
 
         {/* Calendar Grid */}
-        <View style={styles.calendarCard}>
+        <Animated.View style={[styles.calendarCard, calAnim]}>
           {/* Day names */}
           <View style={styles.dayNamesRow}>
             {DAYS.map((d) => (
@@ -143,7 +161,7 @@ export default function CalendarScreen() {
               );
             })}
           </View>
-        </View>
+        </Animated.View>
 
         {/* Selected date info */}
         <View style={styles.selectedInfo}>
@@ -159,7 +177,7 @@ export default function CalendarScreen() {
         </View>
 
         {/* Tab Toggle */}
-        <View style={styles.tabRow}>
+        <Animated.View style={[styles.tabRow, tabsAnim]}>
           <Pressable style={[styles.tabBtn, activeTab === 'schedule' && styles.tabActive]} onPress={() => setActiveTab('schedule')}>
             <MaterialIcons name="event" size={16} color={activeTab === 'schedule' ? '#fff' : Colors.textMuted} />
             <Text style={[styles.tabText, activeTab === 'schedule' && styles.tabTextActive]}>
@@ -172,10 +190,10 @@ export default function CalendarScreen() {
               Tugas ({tasks.filter((t) => t.status !== 'done').length})
             </Text>
           </Pressable>
-        </View>
+        </Animated.View>
 
         {/* Add Buttons */}
-        <View style={styles.addRow}>
+        <Animated.View style={[styles.addRow, tabsAnim]}>
           {activeTab === 'schedule' ? (
             <Pressable style={styles.addBtn} onPress={() => router.push('/add-event')}>
               <MaterialIcons name="add" size={16} color="#fff" />
@@ -187,10 +205,10 @@ export default function CalendarScreen() {
               <Text style={styles.addBtnText}>Tambah Tugas</Text>
             </Pressable>
           )}
-        </View>
+        </Animated.View>
 
         {activeTab === 'schedule' ? (
-          <View style={styles.section}>
+          <Animated.View style={[styles.section, listAnim]}>
             {isShowingAll && allFutureEvents.length > 0 ? (
               <Text style={styles.sectionHint}>Tidak ada jadwal pada tanggal ini. Menampilkan jadwal mendatang:</Text>
             ) : null}
@@ -240,9 +258,9 @@ export default function CalendarScreen() {
                 );
               })
             )}
-          </View>
+          </Animated.View>
         ) : (
-          <View style={styles.section}>
+          <Animated.View style={[styles.section, listAnim]}>
             <View style={styles.taskStats}>
               <View style={[styles.taskStatItem, { backgroundColor: Colors.dangerSurface }]}>
                 <Text style={[styles.taskStatNum, { color: Colors.danger }]}>{tasksByStatus.todo}</Text>
@@ -301,7 +319,7 @@ export default function CalendarScreen() {
                 );
               })
             )}
-          </View>
+          </Animated.View>
         )}
 
         <View style={styles.bottomPad} />

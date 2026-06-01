@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, FlatList, Pressable, ScrollView,
 } from 'react-native';
@@ -6,6 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, withSpring, Easing,
+} from 'react-native-reanimated';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { useApp } from '@/contexts/AppContext';
 import { TransactionItem } from '@/components';
@@ -18,6 +21,16 @@ const FILTERS = [
   { key: 'transfer', label: 'Transfer' },
 ] as const;
 
+function useFadeSlide(delay = 0) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 20, stiffness: 130 }));
+  }, []);
+  return useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ translateY: translateY.value }] }));
+}
+
 export default function TransactionsScreen() {
   const router = useRouter();
   const { transactions, categories, accounts, loading } = useApp();
@@ -27,8 +40,7 @@ export default function TransactionsScreen() {
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
       const matchesFilter = filter === 'all' || t.type === filter;
-      const matchesSearch = searchQuery === '' ||
-        t.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = searchQuery === '' || t.description.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesFilter && matchesSearch;
     });
   }, [transactions, filter, searchQuery]);
@@ -41,19 +53,22 @@ export default function TransactionsScreen() {
   const getCat = (catId: string) => categories.find((c) => c.id === catId);
   const getAcc = (accId: string) => accounts.find((a) => a.id === accId);
 
+  const headerAnim = useFadeSlide(0);
+  const summaryAnim = useFadeSlide(80);
+  const searchAnim = useFadeSlide(150);
+  const listAnim = useFadeSlide(220);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
+      <Animated.View style={[styles.header, headerAnim]}>
         <Text style={styles.title}>Transaksi</Text>
         <Pressable style={styles.addBtn} onPress={() => router.push('/add-transaction')}>
           <MaterialIcons name="add" size={20} color="#fff" />
           <Text style={styles.addBtnText}>Tambah</Text>
         </Pressable>
-      </View>
+      </Animated.View>
 
-      {/* Summary */}
-      <View style={styles.summary}>
+      <Animated.View style={[styles.summary, summaryAnim]}>
         <View style={styles.summaryItem}>
           <View style={[styles.summaryIcon, { backgroundColor: Colors.successSurface }]}>
             <MaterialIcons name="trending-up" size={16} color={Colors.success} />
@@ -85,62 +100,63 @@ export default function TransactionsScreen() {
             </Text>
           </View>
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Search */}
-      <View style={styles.searchWrap}>
-        <MaterialIcons name="search" size={18} color={Colors.textMuted} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Cari transaksi..."
-          placeholderTextColor={Colors.textDisabled}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 ? (
-          <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
-            <MaterialIcons name="close" size={16} color={Colors.textMuted} />
-          </Pressable>
-        ) : null}
-      </View>
-
-      {/* Filters */}
-      <View style={styles.filterBarWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBarContent}>
-          {FILTERS.map((f) => (
-            <Pressable
-              key={f.key}
-              style={[styles.filterChip, filter === f.key && styles.filterActive]}
-              onPress={() => setFilter(f.key)}
-            >
-              <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>{f.label}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* List */}
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        renderItem={({ item }) => (
-          <TransactionItem
-            transaction={item}
-            category={getCat(item.category_id)}
-            account={getAcc(item.account_id)}
+      <Animated.View style={searchAnim}>
+        <View style={styles.searchWrap}>
+          <MaterialIcons name="search" size={18} color={Colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Cari transaksi..."
+            placeholderTextColor={Colors.textDisabled}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
           />
-        )}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <MaterialIcons name="receipt-long" size={48} color={Colors.textDisabled} />
-            <Text style={styles.emptyTitle}>{loading ? 'Memuat...' : 'Tidak ada transaksi'}</Text>
-            <Text style={styles.emptyText}>{loading ? '' : 'Tekan Tambah untuk mencatat transaksi pertama'}</Text>
-          </View>
-        }
-      />
+          {searchQuery.length > 0 ? (
+            <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
+              <MaterialIcons name="close" size={16} color={Colors.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={styles.filterBarWrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBarContent}>
+            {FILTERS.map((f) => (
+              <Pressable
+                key={f.key}
+                style={[styles.filterChip, filter === f.key && styles.filterActive]}
+                onPress={() => setFilter(f.key)}
+              >
+                <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>{f.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      </Animated.View>
+
+      <Animated.View style={[{ flex: 1 }, listAnim]}>
+        <FlatList
+          data={filtered}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={({ item }) => (
+            <TransactionItem
+              transaction={item}
+              category={getCat(item.category_id)}
+              account={getAcc(item.account_id)}
+            />
+          )}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <MaterialIcons name="receipt-long" size={48} color={Colors.textDisabled} />
+              <Text style={styles.emptyTitle}>{loading ? 'Memuat...' : 'Tidak ada transaksi'}</Text>
+              <Text style={styles.emptyText}>{loading ? '' : 'Tekan Tambah untuk mencatat transaksi pertama'}</Text>
+            </View>
+          }
+        />
+      </Animated.View>
     </SafeAreaView>
   );
 }

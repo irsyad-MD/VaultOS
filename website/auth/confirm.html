@@ -12,17 +12,22 @@
     .icon { font-size: 3rem; }
     h2 { font-size: 1.3rem; }
     p { color: #a1a1aa; font-size: 0.9rem; line-height: 1.6; }
+    .otp-box { background: #09090b; border: 2px solid #6366f1; border-radius: 12px; padding: 20px; margin: 8px 0; }
+    .otp-code { font-size: 3rem; font-weight: 900; letter-spacing: 16px; color: #6366f1; font-family: monospace; }
+    .otp-hint { font-size: 0.8rem; color: #52525b; margin-top: 8px; }
     .btn { display: inline-block; margin-top: 8px; padding: 14px 28px; background: #6366f1; color: #fff; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.95rem; }
     .btn.error { background: #ef4444; }
     .loader { width: 36px; height: 36px; border: 3px solid #27272a; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .animate { animation: fadeIn 0.4s ease forwards; }
   </style>
 </head>
 <body>
   <div class="logo">VaultOS</div>
   <div class="card" id="card">
     <div class="loader" id="loader"></div>
-    <p id="msg">Memverifikasi email kamu...</p>
+    <p id="msg">Memproses verifikasi...</p>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -36,21 +41,36 @@
     async function verify() {
       const params = new URLSearchParams(window.location.search);
       const token_hash = params.get('token_hash');
+      const token = params.get('token'); // fallback: some email links send raw token
       const type = params.get('type') || 'email';
-
       const card = document.getElementById('card');
 
+      // Case 1: raw OTP token in URL (show it to user)
+      if (token && !token_hash) {
+        card.innerHTML = `
+          <div class="icon animate">📧</div>
+          <h2>Kode Verifikasi Kamu</h2>
+          <p>Masukkan kode di bawah ini di aplikasi VaultOS:</p>
+          <div class="otp-box animate">
+            <div class="otp-code">${token}</div>
+            <div class="otp-hint">Kode berlaku selama 1 jam</div>
+          </div>
+          <p>Buka aplikasi VaultOS → Daftar → Masukkan kode di atas.</p>
+        `;
+        return;
+      }
+
+      // Case 2: token_hash (magic link) — verify automatically
       if (!token_hash) {
-        card.innerHTML = '<div class="icon">❌</div><h2>Link Tidak Valid</h2><p>Token verifikasi tidak ditemukan. Pastikan kamu membuka link yang benar dari email.</p>';
+        card.innerHTML = '<div class="icon">❌</div><h2>Link Tidak Valid</h2><p>Token tidak ditemukan. Pastikan kamu membuka link yang benar dari email.</p>';
         return;
       }
 
       const { error } = await sb.auth.verifyOtp({ token_hash, type });
-
       if (error) {
         card.innerHTML = `<div class="icon">⚠️</div><h2>Verifikasi Gagal</h2><p>${error.message}</p><a class="btn error" href="/">Kembali</a>`;
       } else {
-        card.innerHTML = '<div class="icon">✅</div><h2>Email Berhasil Diverifikasi!</h2><p>Akun kamu sudah aktif. Buka aplikasi VaultOS dan login sekarang.</p>';
+        card.innerHTML = '<div class="icon animate">✅</div><h2>Email Berhasil Diverifikasi!</h2><p>Akun kamu sudah aktif. Buka aplikasi VaultOS dan login sekarang.</p>';
       }
     }
 

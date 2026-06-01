@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, Pressable,
   ScrollView, KeyboardAvoidingView, Platform,
@@ -6,6 +6,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, withSpring, Easing,
+} from 'react-native-reanimated';
 import { useAuth, useAlert, AuthRouter } from '@/template';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { Image } from 'expo-image';
@@ -14,6 +17,20 @@ function LoginContent() {
   const { signUpWithPassword, signInWithPassword, sendOTP, verifyOTPAndLogin, operationLoading } = useAuth();
   const { showAlert } = useAlert();
   const [mode, setMode] = useState<'login' | 'register' | 'otp'>('login');
+
+  // Animations
+  const heroOpacity = useSharedValue(0);
+  const heroScale = useSharedValue(1.06);
+  const formOpacity = useSharedValue(0);
+  const formTranslateY = useSharedValue(32);
+  useEffect(() => {
+    heroOpacity.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
+    heroScale.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
+    formOpacity.value = withDelay(200, withTiming(1, { duration: 500, easing: Easing.out(Easing.cubic) }));
+    formTranslateY.value = withDelay(200, withSpring(0, { damping: 18, stiffness: 110 }));
+  }, []);
+  const heroAnim = useAnimatedStyle(() => ({ opacity: heroOpacity.value, transform: [{ scale: heroScale.value }] }));
+  const formAnim = useAnimatedStyle(() => ({ opacity: formOpacity.value, transform: [{ translateY: formTranslateY.value }] }));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -50,16 +67,16 @@ function LoginContent() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
         {/* Hero */}
-        <View style={styles.heroContainer}>
+        <Animated.View style={[styles.heroContainer, heroAnim]}>
           <Image source={require('@/assets/images/hero-onboarding.png')} style={styles.heroImage} contentFit="cover" />
           <View style={styles.heroOverlay} />
           <View style={styles.heroBranding}>
             <Text style={styles.heroTitle}>VaultOS</Text>
             <Text style={styles.heroSubtitle}>Personal Finance Operating System</Text>
           </View>
-        </View>
+        </Animated.View>
 
-        <View style={styles.form}>
+        <Animated.View style={[styles.form, formAnim]}>
           {/* Mode Selector */}
           <View style={styles.modeRow}>
             <Pressable style={[styles.modeBtn, mode === 'login' && styles.modeBtnActive]} onPress={() => setMode('login')}>
@@ -174,7 +191,7 @@ function LoginContent() {
 
           <Text style={styles.watermark}>by ImsyadDeveloper</Text>
 
-        </View>
+        </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

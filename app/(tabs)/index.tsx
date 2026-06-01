@@ -1,10 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay,
+  withSpring, Easing,
+} from 'react-native-reanimated';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { useApp } from '@/contexts/AppContext';
 import { formatCurrency, getProgressPercent } from '@/services/db';
@@ -12,6 +16,16 @@ import {
   BalanceCard, TransactionItem, StatCard, AIInsightCard,
   IncomeExpenseChart, SpendingDonut, Card,
 } from '@/components';
+
+function useFadeSlide(delay = 0) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(24);
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 18, stiffness: 120 }));
+  }, []);
+  return useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ translateY: translateY.value }] }));
+}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -23,31 +37,20 @@ export default function DashboardScreen() {
   const greeting = hour < 12 ? 'Selamat Pagi' : hour < 17 ? 'Selamat Siang' : 'Selamat Malam';
 
   const totalBalance = useMemo(() => accounts.filter((a) => !a.is_hidden).reduce((s, a) => s + a.balance, 0), [accounts]);
-
   const thisMonthTxns = useMemo(() => transactions.filter((t) => t.date.startsWith(currentMonthYear)), [transactions, currentMonthYear]);
-
   const monthlyIncome = useMemo(() => thisMonthTxns.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0), [thisMonthTxns]);
   const monthlyExpense = useMemo(() => thisMonthTxns.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0), [thisMonthTxns]);
   const monthlySavings = monthlyIncome - monthlyExpense;
-
   const recentTransactions = useMemo(() => transactions.slice(0, 5), [transactions]);
-
   const upcomingEvents = useMemo(() =>
-    events.filter((e) => new Date(e.date).getTime() >= Date.now() - 86400 * 1000).slice(0, 3),
-    [events]
-  );
-
+    events.filter((e) => new Date(e.date).getTime() >= Date.now() - 86400 * 1000).slice(0, 3), [events]);
   const today = now.toISOString().split('T')[0];
   const todayCompletedHabits = useMemo(() => habitCompletions.filter((c) => c.completed_date === today).length, [habitCompletions, today]);
-
-  const budgetOverspent = useMemo(() => {
-    return budgets.filter((b) => {
+  const budgetOverspent = useMemo(() =>
+    budgets.filter((b) => {
       const spent = thisMonthTxns.filter((t) => t.type === 'expense' && t.category_id === b.category_id).reduce((s, t) => s + t.amount, 0);
       return spent > b.budget_limit;
-    }).length;
-  }, [budgets, thisMonthTxns]);
-
-  // Chart data - last 6 months
+    }).length, [budgets, thisMonthTxns]);
   const chartData = useMemo(() => Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
     const ym = d.toISOString().slice(0, 7);
@@ -59,12 +62,9 @@ export default function DashboardScreen() {
       expense: mTxns.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0),
     };
   }), [transactions]);
-
   const balanceChartData = chartData.map((d) => ({ value: d.income - d.expense }));
-
-  // Spending by category
   const spendingData = useMemo(() => {
-    const catSpend = categories
+    return categories
       .map((cat) => {
         const val = thisMonthTxns.filter((t) => t.type === 'expense' && t.category_id === cat.id).reduce((s, t) => s + t.amount, 0);
         return { name: cat.name, value: val, color: cat.color, percentage: monthlyExpense > 0 ? Math.round((val / monthlyExpense) * 100) : 0 };
@@ -72,38 +72,38 @@ export default function DashboardScreen() {
       .filter((c) => c.value > 0)
       .sort((a, b) => b.value - a.value)
       .slice(0, 7);
-    return catSpend;
   }, [categories, thisMonthTxns, monthlyExpense]);
-
-  // AI Insights (generated from real data)
   const aiInsights = useMemo(() => {
     const insights = [];
-    if (budgetOverspent > 0) {
-      insights.push({ id: 'ins_1', type: 'warning', icon: 'warning', title: 'Anggaran Terlampaui', description: `${budgetOverspent} kategori melebihi anggaran bulan ini. Perhatikan pengeluaran kamu.`, color: Colors.warning });
-    }
+    if (budgetOverspent > 0) insights.push({ id: 'ins_1', type: 'warning', icon: 'warning', title: 'Anggaran Terlampaui', description: `${budgetOverspent} kategori melebihi anggaran bulan ini.`, color: Colors.warning });
     if (goals.length > 0) {
       const topGoal = goals[0];
       const p = getProgressPercent(topGoal.current_amount, topGoal.target_amount);
       insights.push({ id: 'ins_2', type: 'success', icon: 'savings', title: 'Progres Tujuan', description: `${topGoal.name} sudah ${p}% tercapai. Tetap semangat!`, color: Colors.success });
     }
-    if (monthlySavings > 0) {
-      insights.push({ id: 'ins_3', type: 'info', icon: 'lightbulb', title: 'Tabungan Bulan Ini', description: `Kamu berhasil menabung ${formatCurrency(monthlySavings, true)} bulan ini. Bagus sekali!`, color: Colors.primary });
-    }
-    if (insights.length === 0) {
-      insights.push({ id: 'ins_0', type: 'info', icon: 'add-circle', title: 'Mulai Catat', description: 'Tambahkan transaksi pertama kamu untuk melihat insight keuangan yang dipersonalisasi.', color: Colors.primary });
-    }
+    if (monthlySavings > 0) insights.push({ id: 'ins_3', type: 'info', icon: 'lightbulb', title: 'Tabungan Bulan Ini', description: `Kamu berhasil menabung ${formatCurrency(monthlySavings, true)} bulan ini.`, color: Colors.primary });
+    if (insights.length === 0) insights.push({ id: 'ins_0', type: 'info', icon: 'add-circle', title: 'Mulai Catat', description: 'Tambahkan transaksi pertama kamu untuk melihat insight keuangan.', color: Colors.primary });
     return insights;
   }, [budgetOverspent, goals, monthlySavings]);
 
   const getCat = (catId: string) => categories.find((c) => c.id === catId);
   const getAcc = (accId: string) => accounts.find((a) => a.id === accId);
 
+  // Animations
+  const headerAnim = useFadeSlide(0);
+  const balanceAnim = useFadeSlide(80);
+  const actionsAnim = useFadeSlide(160);
+  const statsAnim = useFadeSlide(220);
+  const chartsAnim = useFadeSlide(300);
+  const insightsAnim = useFadeSlide(360);
+  const eventsAnim = useFadeSlide(420);
+  const txnsAnim = useFadeSlide(480);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
 
-        {/* Header */}
-        <View style={styles.header}>
+        <Animated.View style={[styles.header, headerAnim]}>
           <View>
             <Text style={styles.greeting}>{greeting} 👋</Text>
             <Text style={styles.subtitle}>VaultOS — Personal Finance OS</Text>
@@ -113,25 +113,23 @@ export default function DashboardScreen() {
               <MaterialIcons name="notifications-none" size={22} color={Colors.textSecondary} />
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Balance Card */}
-        <BalanceCard
-          totalBalance={totalBalance}
-          monthlyIncome={monthlyIncome}
-          monthlyExpense={monthlyExpense}
-          chartData={balanceChartData}
-        />
+        <Animated.View style={balanceAnim}>
+          <BalanceCard
+            totalBalance={totalBalance}
+            monthlyIncome={monthlyIncome}
+            monthlyExpense={monthlyExpense}
+            chartData={balanceChartData}
+          />
+        </Animated.View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
+        <Animated.View style={[styles.quickActions, actionsAnim]}>
           {QUICK_ACTIONS.map((action) => (
             <Pressable
               key={action.id}
               style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
-              onPress={() => {
-                if (action.route) router.push(action.route as any);
-              }}
+              onPress={() => { if (action.route) router.push(action.route as any); }}
             >
               <View style={[styles.quickIcon, { backgroundColor: action.color + '20' }]}>
                 <MaterialIcons name={action.icon as any} size={20} color={action.color} />
@@ -139,38 +137,37 @@ export default function DashboardScreen() {
               <Text style={styles.quickLabel}>{action.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </Animated.View>
 
-        {/* Stats Row */}
-        <View style={styles.statsRow}>
+        <Animated.View style={[styles.statsRow, statsAnim]}>
           <StatCard label="Tabungan" value={formatCurrency(monthlySavings, true)} icon="savings" iconColor={monthlySavings >= 0 ? Colors.success : Colors.danger} />
           <StatCard label="Kebiasaan" value={`${todayCompletedHabits}/${habits.length}`} icon="loop" iconColor={Colors.purple} />
           <StatCard label="Overspent" value={`${budgetOverspent} kat`} icon="warning" iconColor={budgetOverspent > 0 ? Colors.danger : Colors.success} />
-        </View>
+        </Animated.View>
 
-        {/* Charts */}
-        {chartData.some((d) => d.income > 0 || d.expense > 0) ? (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Pemasukan vs Pengeluaran</Text>
-              <Text style={styles.sectionSub}>6 bulan</Text>
+        <Animated.View style={chartsAnim}>
+          {chartData.some((d) => d.income > 0 || d.expense > 0) ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Pemasukan vs Pengeluaran</Text>
+                <Text style={styles.sectionSub}>6 bulan</Text>
+              </View>
+              <Card style={styles.chartCard}><IncomeExpenseChart data={chartData} /></Card>
             </View>
-            <Card style={styles.chartCard}><IncomeExpenseChart data={chartData} /></Card>
-          </View>
-        ) : null}
+          ) : null}
 
-        {spendingData.length > 0 ? (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Pengeluaran Bulan Ini</Text>
-              <Text style={styles.sectionSub}>{formatCurrency(monthlyExpense, true)}</Text>
+          {spendingData.length > 0 ? (
+            <View style={[styles.section, { marginTop: Spacing.xl }]}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Pengeluaran Bulan Ini</Text>
+                <Text style={styles.sectionSub}>{formatCurrency(monthlyExpense, true)}</Text>
+              </View>
+              <Card style={styles.chartCard}><SpendingDonut data={spendingData} /></Card>
             </View>
-            <Card style={styles.chartCard}><SpendingDonut data={spendingData} /></Card>
-          </View>
-        ) : null}
+          ) : null}
+        </Animated.View>
 
-        {/* AI Insights */}
-        <View style={styles.section}>
+        <Animated.View style={[styles.section, insightsAnim]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>AI Insights</Text>
             <View style={styles.aiBadge}>
@@ -183,11 +180,10 @@ export default function DashboardScreen() {
               {aiInsights.map((ins) => (<AIInsightCard key={ins.id} insight={ins} />))}
             </View>
           </ScrollView>
-        </View>
+        </Animated.View>
 
-        {/* Upcoming Events */}
         {upcomingEvents.length > 0 ? (
-          <View style={styles.section}>
+          <Animated.View style={[styles.section, eventsAnim]}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Jadwal Mendatang</Text>
               <Pressable onPress={() => router.push('/(tabs)/calendar')}><Text style={styles.seeAll}>Lihat semua</Text></Pressable>
@@ -206,11 +202,10 @@ export default function DashboardScreen() {
                 </View>
               ))}
             </View>
-          </View>
+          </Animated.View>
         ) : null}
 
-        {/* Recent Transactions */}
-        <View style={styles.section}>
+        <Animated.View style={[styles.section, txnsAnim]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Transaksi Terbaru</Text>
             <Pressable onPress={() => router.push('/(tabs)/transactions')}><Text style={styles.seeAll}>Lihat semua</Text></Pressable>
@@ -230,12 +225,11 @@ export default function DashboardScreen() {
               ))}
             </Card>
           )}
-        </View>
+        </Animated.View>
 
         <View style={styles.bottomPad} />
       </ScrollView>
 
-      {/* FAB */}
       <Pressable style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]} onPress={() => router.push('/add-transaction')}>
         <MaterialIcons name="add" size={28} color="#fff" />
       </Pressable>

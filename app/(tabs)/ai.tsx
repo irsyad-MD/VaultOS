@@ -1,10 +1,14 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable, TextInput,
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay,
+  withSpring, Easing,
+} from 'react-native-reanimated';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { useApp } from '@/contexts/AppContext';
 import { formatCurrency } from '@/services/db';
@@ -16,7 +20,6 @@ interface AnalysisResult {
   timestamp: Date;
 }
 
-// Parse inline markdown: **bold**, *italic*
 function parseInline(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
   const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
@@ -36,12 +39,10 @@ function parseInline(text: string): React.ReactNode[] {
   return parts;
 }
 
-// Parse markdown-ish content into sections
 function parseContent(text: string): { heading: string; body: string }[] {
   const sections: { heading: string; body: string }[] = [];
   const lines = text.split('\n');
   let current: { heading: string; body: string } | null = null;
-
   for (const line of lines) {
     const headingMatch = line.match(/^#{1,3}\s+(.+)$/);
     if (headingMatch) {
@@ -67,6 +68,16 @@ function getRatingColor(text: string): string {
   return Colors.primary;
 }
 
+function useFadeSlide(delay = 0) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(24);
+  useEffect(() => {
+    opacity.value = withDelay(delay, withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 18, stiffness: 120 }));
+  }, []);
+  return useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ translateY: translateY.value }] }));
+}
+
 export default function AIScreen() {
   const { transactions, categories, goals, habits, habitCompletions } = useApp();
   const { showAlert } = useAlert();
@@ -86,9 +97,7 @@ export default function AIScreen() {
 
   const topCategories = categories
     .map((cat) => {
-      const val = thisMonthTxns
-        .filter((t) => t.type === 'expense' && t.category_id === cat.id)
-        .reduce((s, t) => s + t.amount, 0);
+      const val = thisMonthTxns.filter((t) => t.type === 'expense' && t.category_id === cat.id).reduce((s, t) => s + t.amount, 0);
       return { name: cat.name, value: val, percentage: totalExpense > 0 ? Math.round((val / totalExpense) * 100) : 0 };
     })
     .filter((c) => c.value > 0)
@@ -101,24 +110,17 @@ export default function AIScreen() {
   const callAI = async (opts: { question?: string } = {}) => {
     const isChat = Boolean(opts.question);
     if (isChat) setChatLoading(true); else setLoading(true);
-
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase.functions.invoke('sydz-agents', {
         body: {
-          totalIncome,
-          totalExpense,
-          savingsRate,
-          topCategories,
+          totalIncome, totalExpense, savingsRate, topCategories,
           goals: goals.map((g) => ({ name: g.name, current_amount: g.current_amount, target_amount: g.target_amount })),
           habits: habits.map((h) => ({ name: h.name, streak: h.streak })),
-          completedHabitsToday,
-          totalHabits: habits.length,
-          transactionCount,
+          completedHabitsToday, totalHabits: habits.length, transactionCount,
           question: opts.question ?? '',
         },
       });
-
       if (error) {
         let errorMessage = error.message;
         if (error instanceof FunctionsHttpError) {
@@ -126,19 +128,13 @@ export default function AIScreen() {
             const statusCode = error.context?.status ?? 500;
             const textContent = await error.context?.text();
             errorMessage = `[${statusCode}] ${textContent || error.message}`;
-          } catch {
-            errorMessage = error.message;
-          }
+          } catch { errorMessage = error.message; }
         }
         showAlert('Gagal', errorMessage);
         return;
       }
-
-      if (isChat) {
-        setChatAnswer(data.content);
-      } else {
-        setAnalysis({ content: data.content, timestamp: new Date() });
-      }
+      if (isChat) setChatAnswer(data.content);
+      else setAnalysis({ content: data.content, timestamp: new Date() });
     } catch (e: any) {
       showAlert('Error', e.message ?? 'Tidak dapat terhubung ke Sydz Agents.');
     } finally {
@@ -147,38 +143,39 @@ export default function AIScreen() {
   };
 
   const handleAskQuestion = () => {
-    if (!question.trim()) {
-      showAlert('Tulis Pertanyaan', 'Masukkan pertanyaan kamu terlebih dahulu.');
-      return;
-    }
+    if (!question.trim()) { showAlert('Tulis Pertanyaan', 'Masukkan pertanyaan kamu terlebih dahulu.'); return; }
     setChatAnswer(null);
     callAI({ question: question.trim() });
   };
 
   const sections = analysis ? parseContent(analysis.content) : [];
 
+  // Animations
+  const headerAnim = useFadeSlide(0);
+  const statsAnim = useFadeSlide(80);
+  const btnAnim = useFadeSlide(160);
+  const resultAnim = useFadeSlide(0);
+  const chatAnim = useFadeSlide(240);
+  const featAnim = useFadeSlide(320);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
-          {/* Header */}
-          <View style={styles.header}>
+          <Animated.View style={[styles.header, headerAnim]}>
             <View style={styles.agentBadge}>
               <MaterialIcons name="auto-awesome" size={20} color={Colors.primary} />
               <Text style={styles.agentName}>Sydz Agents</Text>
             </View>
             <Text style={styles.headerTitle}>AI Financial Advisor</Text>
-            <Text style={styles.headerSub}>Analisis cerdas keuangan & produktivitas personal kamu</Text>
-          </View>
+            <Text style={styles.headerSub}>Analisis cerdas keuangan &amp; produktivitas personal kamu</Text>
+          </Animated.View>
 
-          {/* Quick Stats */}
-          <View style={styles.statsRow}>
+          <Animated.View style={[styles.statsRow, statsAnim]}>
             <View style={[styles.statCard, { borderColor: Colors.success + '40' }]}>
               <Text style={styles.statLabel}>Tabungan</Text>
-              <Text style={[styles.statValue, { color: savingsRate >= 20 ? Colors.success : savingsRate >= 10 ? Colors.warning : Colors.danger }]}>
-                {savingsRate}%
-              </Text>
+              <Text style={[styles.statValue, { color: savingsRate >= 20 ? Colors.success : savingsRate >= 10 ? Colors.warning : Colors.danger }]}>{savingsRate}%</Text>
             </View>
             <View style={[styles.statCard, { borderColor: Colors.primary + '40' }]}>
               <Text style={styles.statLabel}>Transaksi</Text>
@@ -188,34 +185,34 @@ export default function AIScreen() {
               <Text style={styles.statLabel}>Habit Hari Ini</Text>
               <Text style={[styles.statValue, { color: Colors.purple }]}>{completedHabitsToday}/{habits.length}</Text>
             </View>
-          </View>
+          </Animated.View>
 
-          {/* Analyze Button */}
-          <Pressable
-            style={({ pressed }) => [styles.analyzeBtn, loading && styles.analyzeBtnLoading, pressed && !loading && { opacity: 0.85 }]}
-            onPress={() => callAI()}
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <ActivityIndicator size="small" color="#fff" />
-                <Text style={styles.analyzeBtnText}>Sedang Menganalisis...</Text>
-              </>
-            ) : (
-              <>
-                <MaterialIcons name="psychology" size={22} color="#fff" />
-                <View>
-                  <Text style={styles.analyzeBtnText}>Analisis Keuangan Lengkap</Text>
-                  <Text style={styles.analyzeBtnSub}>Rating tabungan · Tujuan · Kebiasaan · Rekomendasi</Text>
-                </View>
-                <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.6)" style={{ marginLeft: 'auto' }} />
-              </>
-            )}
-          </Pressable>
+          <Animated.View style={btnAnim}>
+            <Pressable
+              style={({ pressed }) => [styles.analyzeBtn, loading && styles.analyzeBtnLoading, pressed && !loading && { opacity: 0.85 }]}
+              onPress={() => callAI()}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={styles.analyzeBtnText}>Sedang Menganalisis...</Text>
+                </>
+              ) : (
+                <>
+                  <MaterialIcons name="psychology" size={22} color="#fff" />
+                  <View>
+                    <Text style={styles.analyzeBtnText}>Analisis Keuangan Lengkap</Text>
+                    <Text style={styles.analyzeBtnSub}>Rating tabungan · Tujuan · Kebiasaan · Rekomendasi</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={20} color="rgba(255,255,255,0.6)" style={{ marginLeft: 'auto' }} />
+                </>
+              )}
+            </Pressable>
+          </Animated.View>
 
-          {/* Analysis Result */}
           {analysis && sections.length > 0 ? (
-            <View style={styles.resultCard}>
+            <Animated.View style={[styles.resultCard, resultAnim]}>
               <View style={styles.resultHeader}>
                 <MaterialIcons name="auto-awesome" size={16} color={Colors.primary} />
                 <Text style={styles.resultTitle}>Hasil Analisis Sydz Agents</Text>
@@ -238,37 +235,28 @@ export default function AIScreen() {
                     return (
                       <View key={li} style={isBullet ? styles.bulletRow : styles.bodyRow}>
                         {isBullet ? <View style={styles.bulletDot} /> : null}
-                        <Text style={[styles.sectionBody, isBullet && styles.bulletText]}>
-                          {parseInline(cleanLine)}
-                        </Text>
+                        <Text style={[styles.sectionBody, isBullet && styles.bulletText]}>{parseInline(cleanLine)}</Text>
                       </View>
                     );
                   })}
                 </View>
               ))}
-            </View>
+            </Animated.View>
           ) : null}
 
-          {/* Chat / Q&A */}
-          <View style={styles.chatCard}>
+          <Animated.View style={[styles.chatCard, chatAnim]}>
             <View style={styles.chatHeader}>
               <MaterialIcons name="chat" size={18} color={Colors.cyan} />
               <Text style={styles.chatTitle}>Tanya Sydz Agents</Text>
             </View>
             <Text style={styles.chatSub}>Tanya apa saja tentang keuangan dan produktivitas kamu</Text>
-
             <View style={styles.suggestRow}>
-              {[
-                'Gimana cara kurangi pengeluaran?',
-                'Kapan target tujuan tercapai?',
-                'Strategi menabung lebih efektif?',
-              ].map((q) => (
+              {['Gimana cara kurangi pengeluaran?', 'Kapan target tujuan tercapai?', 'Strategi menabung lebih efektif?'].map((q) => (
                 <Pressable key={q} style={styles.suggestChip} onPress={() => setQuestion(q)}>
                   <Text style={styles.suggestText}>{q}</Text>
                 </Pressable>
               ))}
             </View>
-
             <View style={styles.inputRow}>
               <TextInput
                 style={styles.chatInput}
@@ -284,14 +272,9 @@ export default function AIScreen() {
                 onPress={handleAskQuestion}
                 disabled={!question.trim() || chatLoading}
               >
-                {chatLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <MaterialIcons name="send" size={18} color="#fff" />
-                )}
+                {chatLoading ? <ActivityIndicator size="small" color="#fff" /> : <MaterialIcons name="send" size={18} color="#fff" />}
               </Pressable>
             </View>
-
             {chatAnswer ? (
               <View style={styles.chatAnswer}>
                 <View style={styles.chatAnswerHeader}>
@@ -300,17 +283,14 @@ export default function AIScreen() {
                   </View>
                   <Text style={styles.chatAnswerLabel}>Sydz Agents</Text>
                 </View>
-                <Text style={styles.chatAnswerText}>
-                  {parseInline(chatAnswer)}
-                </Text>
+                <Text style={styles.chatAnswerText}>{parseInline(chatAnswer)}</Text>
               </View>
             ) : null}
-          </View>
+          </Animated.View>
 
-          {/* Feature Highlights */}
-          <View style={styles.featuresGrid}>
+          <Animated.View style={[styles.featuresGrid, featAnim]}>
             {[
-              { icon: 'star', color: Colors.gold, title: 'Rating Menabung', desc: 'A–F berdasarkan pola keuangan' },
+              { icon: 'star', color: Colors.gold, title: 'Rating Menabung', desc: 'A-F berdasarkan pola keuangan' },
               { icon: 'savings', color: Colors.success, title: 'Progress Tujuan', desc: 'Analisis tiap goal kamu' },
               { icon: 'loop', color: Colors.purple, title: 'Kebiasaan', desc: 'Evaluasi habit harian' },
               { icon: 'lightbulb', color: Colors.warning, title: 'Rekomendasi', desc: 'Solusi actionable & spesifik' },
@@ -323,7 +303,7 @@ export default function AIScreen() {
                 <Text style={styles.featureDesc}>{f.desc}</Text>
               </View>
             ))}
-          </View>
+          </Animated.View>
 
           <View style={{ height: Spacing.xxl }} />
         </ScrollView>
@@ -344,16 +324,7 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.md, borderWidth: 1, alignItems: 'center', gap: 4 },
   statLabel: { fontSize: Typography.xs, color: Colors.textMuted, textAlign: 'center' },
   statValue: { fontSize: Typography.lg, fontWeight: Typography.extrabold },
-  analyzeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    marginHorizontal: Spacing.base,
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.xl,
-    padding: Spacing.base,
-    paddingVertical: Spacing.lg,
-  },
+  analyzeBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginHorizontal: Spacing.base, backgroundColor: Colors.primary, borderRadius: Radius.xl, padding: Spacing.base, paddingVertical: Spacing.lg },
   analyzeBtnLoading: { backgroundColor: Colors.primaryDark },
   analyzeBtnText: { fontSize: Typography.sm, fontWeight: Typography.bold, color: '#fff' },
   analyzeBtnSub: { fontSize: Typography.xs, color: 'rgba(255,255,255,0.65)', marginTop: 2 },
@@ -366,7 +337,6 @@ const styles = StyleSheet.create({
   sectionBody: { fontSize: Typography.sm, color: Colors.textSecondary, lineHeight: 22 },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   bodyRow: {},
-  inlineBold: { fontWeight: '700', color: Colors.text },
   bulletDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primary, marginTop: 8, flexShrink: 0 },
   bulletText: { flex: 1 },
   chatCard: { marginHorizontal: Spacing.base, backgroundColor: Colors.card, borderRadius: Radius.xl, padding: Spacing.base, borderWidth: 1, borderColor: Colors.border, gap: Spacing.md },
