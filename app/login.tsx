@@ -172,6 +172,7 @@ function LoginContent() {
             </Pressable>
           ) : null}
 
+          <Text style={styles.watermark}>by ImsyadDeveloper</Text>
 
         </View>
       </ScrollView>
@@ -213,5 +214,6 @@ const styles = StyleSheet.create({
   submitText: { fontSize: Typography.md, fontWeight: Typography.bold, color: '#fff' },
   backToRegister: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs },
   backText: { fontSize: Typography.sm, color: Colors.textMuted },
+  watermark: { fontSize: Typography.xs, color: Colors.textDisabled, textAlign: 'center', fontStyle: 'italic', marginTop: Spacing.sm },
   disclaimer: { fontSize: Typography.xs, color: Colors.textDisabled, textAlign: 'center' },
 });

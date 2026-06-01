@@ -158,6 +158,23 @@ export default function MoreScreen() {
         </View>
 
         {/* Menu Sections */}
+        {/* Add Category shortcut */}
+        <View style={styles.section}>
+          <Text style={styles.menuSectionTitle}>Kategori</Text>
+          <View style={styles.menuCard}>
+            <Pressable
+              style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+              onPress={() => router.push('/add-category' as any)}
+            >
+              <View style={[styles.menuIcon, { backgroundColor: Colors.primary + '20' }]}>
+                <MaterialIcons name="category" size={20} color={Colors.primary} />
+              </View>
+              <Text style={styles.menuLabel}>Tambah Kategori</Text>
+              <MaterialIcons name="chevron-right" size={18} color={Colors.textMuted} />
+            </Pressable>
+          </View>
+        </View>
+
         {MENU_SECTIONS.map((section) => (
           <View key={section.title} style={styles.section}>
             <Text style={styles.menuSectionTitle}>{section.title}</Text>
@@ -182,6 +199,13 @@ export default function MoreScreen() {
         ))}
 
 
+
+        {/* Watermark */}
+        <View style={styles.watermarkSection}>
+          <Text style={styles.appName}>VaultOS</Text>
+          <Text style={styles.appTagline}>Manage your life, one vault at a time</Text>
+          <Text style={styles.watermark}>by ImsyadDeveloper</Text>
+        </View>
 
         <View style={styles.bottomPad} />
       </ScrollView>
@@ -238,9 +262,9 @@ const styles = StyleSheet.create({
   menuIcon: { width: 38, height: 38, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   menuLabel: { flex: 1, fontSize: Typography.sm, fontWeight: Typography.medium, color: Colors.text },
   menuDivider: { height: 1, backgroundColor: Colors.borderSubtle, marginLeft: 70 },
-  appInfo: { alignItems: 'center', gap: Spacing.xs, paddingVertical: Spacing.lg },
-  appName: { fontSize: Typography.lg, fontWeight: Typography.bold, color: Colors.primary },
-  appVersion: { fontSize: Typography.xs, color: Colors.textMuted },
+  watermarkSection: { alignItems: 'center', gap: Spacing.xs, paddingVertical: Spacing.lg },
+  appName: { fontSize: Typography.md, fontWeight: Typography.bold, color: Colors.primary },
   appTagline: { fontSize: Typography.xs, color: Colors.textDisabled, fontStyle: 'italic' },
+  watermark: { fontSize: Typography.xs, color: Colors.textDisabled, fontStyle: 'italic' },
   bottomPad: { height: Spacing.lg },
 });

@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Platform, View, StyleSheet } from 'react-native';
+import { Platform } from 'react-native';
 import { Colors, Typography } from '@/constants/theme';
 
 export default function TabLayout() {
@@ -55,20 +55,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="budget"
-        options={{
-          title: 'Anggaran',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="pie-chart" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="calendar"
         options={{
           title: 'Jadwal',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="event" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="ai"
+        options={{
+          title: 'Sydz AI',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="auto-awesome" size={size} color={color} />
           ),
         }}
       />
@@ -79,6 +79,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="grid-view" size={size} color={color} />
           ),
+        }}
+      />
+      {/* Keep budget screen but hide from tab bar */}
+      <Tabs.Screen
+        name="budget"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

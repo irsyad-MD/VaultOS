@@ -186,6 +186,17 @@ export default function RootLayout() {
                     headerShadowVisible: false,
                   }}
                 />
+                <Stack.Screen
+                  name="add-category"
+                  options={{
+                    headerShown: true,
+                    headerTitle: 'Tambah Kategori',
+                    headerStyle: { backgroundColor: Colors.surface },
+                    headerTintColor: Colors.text,
+                    headerShadowVisible: false,
+                    presentation: 'modal',
+                  }}
+                />
               </Stack>
             </View>
           </AppProvider>
