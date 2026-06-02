@@ -64,8 +64,8 @@ export default function SplashAnimation({ onFinish }: SplashAnimationProps) {
     // Pulsing glow loop
     const pulseLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(glowScale, { toValue: 1.5, duration: 1400, easing: Easing.inOut(Easing.sine), useNativeDriver: true }),
-        Animated.timing(glowScale, { toValue: 1.2, duration: 1400, easing: Easing.inOut(Easing.sine), useNativeDriver: true }),
+        Animated.timing(glowScale, { toValue: 1.5, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(glowScale, { toValue: 1.2, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ])
     );
     const timer = setTimeout(() => pulseLoop.start(), 900);
