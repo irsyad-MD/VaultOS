@@ -1,50 +1,45 @@
 {
   "expo": {
-    "name": "Vaultos",
+    "name": "VaultOS",
     "slug": "vaultos",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
-    "scheme": "onspaceapp",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/icon.png",
+    "scheme": "vaultos",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.imsyad.vaultos"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/logo.jpg",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#09090b"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.imsydzdev.vaultos"
+      "package": "com.imsyad.vaultos"
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/logo.jpg"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo.jpg",
-          "imageWidth": 200,
+          "image": "./assets/images/icon.png",
+          "imageWidth": 150,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#09090b"
         }
       ],
       "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "463a661c-0164-4b3e-adc3-f27f76fd384f"
-      }
     }
   }
 }

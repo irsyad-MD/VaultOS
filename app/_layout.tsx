@@ -5,10 +5,11 @@ import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/theme';
 import { AppProvider } from '@/contexts/AppContext';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, savePushToken } from '@/services/notificationService';
 import { getSupabaseClient } from '@/template';
+import SplashAnimation from '@/components/ui/SplashAnimation';
 
 function NotificationSetup() {
   const notificationListener = useRef<any>(null);
@@ -43,6 +44,8 @@ function NotificationSetup() {
 }
 
 export default function RootLayout() {
+  const [splashDone, setSplashDone] = useState(false);
+
   return (
     <AlertProvider>
       <SafeAreaProvider>
@@ -51,6 +54,9 @@ export default function RootLayout() {
             <View style={styles.root}>
               <StatusBar style="light" />
               <NotificationSetup />
+              {!splashDone ? (
+                <SplashAnimation onFinish={() => setSplashDone(true)} />
+              ) : null}
               <Stack
                 screenOptions={{
                   headerShown: false,
