@@ -265,31 +265,37 @@ export async function recalculateStreak(habitId: string, userId: string): Promis
 
     const dates = completions.map((c: { completed_date: string }) => c.completed_date).sort().reverse();
 
+    // Use LOCAL date string (YYYY-MM-DD) consistently to avoid UTC timezone shift
+    const getLocalDateStr = (d: Date): string => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
     // Calculate current streak (consecutive days ending today or yesterday)
     let streak = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const todayStr = getLocalDateStr(now);
 
-    let checkDate = new Date(today);
-    for (let i = 0; i < dates.length; i++) {
-      const dateStr = checkDate.toISOString().split('T')[0];
+    // Build checkDate from local date to avoid UTC shift
+    let checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Allow streak to start from today OR yesterday (if not yet checked today)
+    let startedFromYesterday = false;
+    if (!dates.includes(todayStr)) {
+      // today not completed — check if yesterday starts the streak
+      checkDate.setDate(checkDate.getDate() - 1);
+      startedFromYesterday = true;
+    }
+
+    while (true) {
+      const dateStr = getLocalDateStr(checkDate);
       if (dates.includes(dateStr)) {
         streak++;
         checkDate.setDate(checkDate.getDate() - 1);
       } else {
-        // If today is missing, allow starting from yesterday
-        if (i === 0) {
-          checkDate.setDate(checkDate.getDate() - 1);
-          const yesterdayStr = checkDate.toISOString().split('T')[0];
-          if (dates.includes(yesterdayStr)) {
-            streak++;
-            checkDate.setDate(checkDate.getDate() - 1);
-          } else {
-            break;
-          }
-        } else {
-          break;
-        }
+        break;
       }
     }
 

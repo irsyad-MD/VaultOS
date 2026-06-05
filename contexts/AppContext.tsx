@@ -216,7 +216,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toggleHabit = useCallback(async (habitId: string) => {
     if (!userId) return;
-    const today = new Date().toISOString().split('T')[0];
+    // Use local date (not UTC) to match recalculateStreak
+    const nowLocal = new Date();
+    const today = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
     const done = await toggleHabitCompletion(habitId, userId, today);
     // Update local completions immediately
     setHabitCompletions((prev) => {
