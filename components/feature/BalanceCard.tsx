@@ -96,17 +96,6 @@ export function BalanceCard({
           </Text>
         </View>
         <View style={styles.headerRight}>
-          {/* Trend indicator */}
-          <View style={[styles.trendBadge, { backgroundColor: isPositive ? 'rgba(255,255,255,0.18)' : 'rgba(255,80,80,0.22)' }]}>
-            <MaterialIcons
-              name={isPositive ? 'trending-up' : 'trending-down'}
-              size={14}
-              color={isPositive ? '#fff' : '#fca5a5'}
-            />
-            <Text style={[styles.trendText, { color: isPositive ? '#fff' : '#fca5a5' }]}>
-              {isPositive ? '+' : ''}{formatCurrency(netSavings, true)}
-            </Text>
-          </View>
           <Pressable onPress={() => setHidden((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
             <MaterialIcons
               name={hidden ? 'visibility-off' : 'visibility'}

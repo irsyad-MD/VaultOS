@@ -8,7 +8,7 @@ import {
   fetchAccounts, fetchCategories, seedDefaultCategories,
   fetchTransactions, fetchBudgets,
   fetchEvents, fetchTasks,
-  fetchHabits, fetchHabitCompletions, toggleHabitCompletion,
+  fetchHabits, fetchHabitCompletions, toggleHabitCompletion, recalculateStreak,
   fetchGoals, topUpGoal as dbTopUpGoal,
   fetchNotes,
   createTransaction as dbCreateTransaction,
@@ -218,10 +218,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!userId) return;
     const today = new Date().toISOString().split('T')[0];
     const done = await toggleHabitCompletion(habitId, userId, today);
+    // Update local completions immediately
     setHabitCompletions((prev) => {
       if (done) return [...prev, { habit_id: habitId, completed_date: today }];
       return prev.filter((c) => !(c.habit_id === habitId && c.completed_date === today));
     });
+    // Recalculate streak and update habits state
+    const { streak, longest_streak } = await recalculateStreak(habitId, userId);
+    setHabits((prev) => prev.map((h) => h.id === habitId ? { ...h, streak, longest_streak } : h));
   }, [userId]);
 
   const removeHabit = useCallback(async (id: string) => {

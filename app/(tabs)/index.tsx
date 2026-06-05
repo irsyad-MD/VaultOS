@@ -1,14 +1,10 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable,
+  View, Text, StyleSheet, ScrollView, Pressable, Animated, Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, withDelay,
-  withSpring, Easing,
-} from 'react-native-reanimated';
 import { Colors, Typography, Spacing, Radius } from '@/constants/theme';
 import { useApp } from '@/contexts/AppContext';
 import { formatCurrency, getProgressPercent } from '@/services/db';
@@ -17,15 +13,110 @@ import {
   IncomeExpenseChart, SpendingDonut, Card,
 } from '@/components';
 
+// ─── Reanimated-free animation hooks using React Native Animated ──────────────
 function useFadeSlide(delay = 0) {
-  const opacity = useSharedValue(0);
-  const translateY = useSharedValue(24);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(28)).current;
   useEffect(() => {
-    opacity.value = withDelay(delay, withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }));
-    translateY.value = withDelay(delay, withSpring(0, { damping: 18, stiffness: 120 }));
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 480, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, delay, friction: 8, tension: 70, useNativeDriver: true }),
+    ]).start();
   }, []);
-  return useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ translateY: translateY.value }] }));
+  return { opacity, transform: [{ translateY }] };
 }
+
+function useScaleIn(delay = 0) {
+  const scale = useRef(new Animated.Value(0.82)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, delay, friction: 7, tension: 80, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 350, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return { opacity, transform: [{ scale }] };
+}
+
+function useSlideRight(delay = 0) {
+  const translateX = useRef(new Animated.Value(-40)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(translateX, { toValue: 0, delay, friction: 8, tension: 90, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 380, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return { opacity, transform: [{ translateX }] };
+}
+
+function useStaggerChildren(count: number, baseDelay = 0, stepDelay = 60) {
+  const anims = useRef(
+    Array.from({ length: count }, () => ({
+      opacity: new Animated.Value(0),
+      translateY: new Animated.Value(20),
+      scale: new Animated.Value(0.92),
+    }))
+  ).current;
+
+  useEffect(() => {
+    const animations = anims.map((a, i) =>
+      Animated.parallel([
+        Animated.timing(a.opacity, { toValue: 1, duration: 380, delay: baseDelay + i * stepDelay, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.spring(a.translateY, { toValue: 0, delay: baseDelay + i * stepDelay, friction: 9, tension: 80, useNativeDriver: true }),
+        Animated.spring(a.scale, { toValue: 1, delay: baseDelay + i * stepDelay, friction: 8, tension: 90, useNativeDriver: true }),
+      ])
+    );
+    Animated.parallel(animations).start();
+  }, []);
+
+  return anims.map((a) => ({ opacity: a.opacity, transform: [{ translateY: a.translateY }, { scale: a.scale }] }));
+}
+
+// Pulsing dot for "live" badge
+function PulseDot({ color = Colors.success }: { color?: string }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.6, duration: 800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  return (
+    <View style={{ width: 10, height: 10, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color, opacity: 0.3, transform: [{ scale: pulse }], position: 'absolute' }} />
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
+    </View>
+  );
+}
+
+// Number counter animation
+function AnimatedNumber({ value, style }: { value: string; style?: any }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+  const prevValue = useRef(value);
+  useEffect(() => {
+    if (prevValue.current !== value) {
+      opacity.setValue(0);
+      translateY.setValue(10);
+    }
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, friction: 8, tension: 80, useNativeDriver: true }),
+    ]).start();
+    prevValue.current = value;
+  }, [value]);
+  return <Animated.Text style={[style, { opacity, transform: [{ translateY }] }]}>{value}</Animated.Text>;
+}
+
+const QUICK_ACTIONS = [
+  { id: 'add', label: 'Tambah', icon: 'add-circle', color: Colors.primary, route: '/add-transaction' },
+  { id: 'accounts', label: 'Akun', icon: 'account-balance-wallet', color: Colors.gold, route: '/accounts' },
+  { id: 'analytics', label: 'Analitik', icon: 'analytics', color: Colors.cyan, route: '/analytics' },
+  { id: 'goals', label: 'Tujuan', icon: 'savings', color: Colors.success, route: '/goals' },
+];
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -89,24 +180,28 @@ export default function DashboardScreen() {
   const getCat = (catId: string) => categories.find((c) => c.id === catId);
   const getAcc = (accId: string) => accounts.find((a) => a.id === accId);
 
-  // Animations
+  // ── Animations ──
   const headerAnim = useFadeSlide(0);
-  const balanceAnim = useFadeSlide(80);
-  const actionsAnim = useFadeSlide(160);
-  const statsAnim = useFadeSlide(220);
-  const chartsAnim = useFadeSlide(300);
-  const insightsAnim = useFadeSlide(360);
-  const eventsAnim = useFadeSlide(420);
-  const txnsAnim = useFadeSlide(480);
+  const balanceAnim = useScaleIn(80);
+  const actionsStagger = useStaggerChildren(4, 200, 55);
+  const statsStagger = useStaggerChildren(3, 360, 65);
+  const chartsAnim = useFadeSlide(460);
+  const insightsAnim = useSlideRight(540);
+  const eventsAnim = useFadeSlide(600);
+  const txnsAnim = useFadeSlide(660);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
 
+        {/* Header */}
         <Animated.View style={[styles.header, headerAnim]}>
           <View>
             <Text style={styles.greeting}>{greeting} 👋</Text>
-            <Text style={styles.subtitle}>VaultOS — Personal Finance OS</Text>
+            <View style={styles.liveBadge}>
+              <PulseDot color={Colors.success} />
+              <Text style={styles.subtitle}>VaultOS · Live</Text>
+            </View>
           </View>
           <View style={styles.headerActions}>
             <Pressable style={styles.iconBtn} hitSlop={8} onPress={() => router.push('/notifications-screen')}>
@@ -115,6 +210,7 @@ export default function DashboardScreen() {
           </View>
         </Animated.View>
 
+        {/* Balance Card */}
         <Animated.View style={balanceAnim}>
           <BalanceCard
             totalBalance={totalBalance}
@@ -124,27 +220,37 @@ export default function DashboardScreen() {
           />
         </Animated.View>
 
-        <Animated.View style={[styles.quickActions, actionsAnim]}>
-          {QUICK_ACTIONS.map((action) => (
-            <Pressable
-              key={action.id}
-              style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
-              onPress={() => { if (action.route) router.push(action.route as any); }}
-            >
-              <View style={[styles.quickIcon, { backgroundColor: action.color + '20' }]}>
-                <MaterialIcons name={action.icon as any} size={20} color={action.color} />
-              </View>
-              <Text style={styles.quickLabel}>{action.label}</Text>
-            </Pressable>
+        {/* Quick Actions with stagger */}
+        <View style={styles.quickActions}>
+          {QUICK_ACTIONS.map((action, i) => (
+            <Animated.View key={action.id} style={[{ flex: 1 }, actionsStagger[i]]}>
+              <Pressable
+                style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
+                onPress={() => { if (action.route) router.push(action.route as any); }}
+              >
+                <View style={[styles.quickIcon, { backgroundColor: action.color + '22' }]}>
+                  <MaterialIcons name={action.icon as any} size={20} color={action.color} />
+                </View>
+                <Text style={styles.quickLabel}>{action.label}</Text>
+              </Pressable>
+            </Animated.View>
           ))}
-        </Animated.View>
+        </View>
 
-        <Animated.View style={[styles.statsRow, statsAnim]}>
-          <StatCard label="Tabungan" value={formatCurrency(monthlySavings, true)} icon="savings" iconColor={monthlySavings >= 0 ? Colors.success : Colors.danger} />
-          <StatCard label="Kebiasaan" value={`${todayCompletedHabits}/${habits.length}`} icon="loop" iconColor={Colors.purple} />
-          <StatCard label="Overspent" value={`${budgetOverspent} kat`} icon="warning" iconColor={budgetOverspent > 0 ? Colors.danger : Colors.success} />
-        </Animated.View>
+        {/* Stats with stagger */}
+        <View style={styles.statsRow}>
+          {[
+            { label: 'Tabungan', value: formatCurrency(monthlySavings, true), icon: 'savings', color: monthlySavings >= 0 ? Colors.success : Colors.danger },
+            { label: 'Kebiasaan', value: `${todayCompletedHabits}/${habits.length}`, icon: 'loop', color: Colors.purple },
+            { label: 'Overspent', value: `${budgetOverspent} kat`, icon: 'warning', color: budgetOverspent > 0 ? Colors.danger : Colors.success },
+          ].map((s, i) => (
+            <Animated.View key={s.label} style={[{ flex: 1 }, statsStagger[i]]}>
+              <StatCard label={s.label} value={s.value} icon={s.icon} iconColor={s.color} />
+            </Animated.View>
+          ))}
+        </View>
 
+        {/* Charts */}
         <Animated.View style={chartsAnim}>
           {chartData.some((d) => d.income > 0 || d.expense > 0) ? (
             <View style={styles.section}>
@@ -167,6 +273,7 @@ export default function DashboardScreen() {
           ) : null}
         </Animated.View>
 
+        {/* AI Insights with slide from left */}
         <Animated.View style={[styles.section, insightsAnim]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>AI Insights</Text>
@@ -182,6 +289,7 @@ export default function DashboardScreen() {
           </ScrollView>
         </Animated.View>
 
+        {/* Events */}
         {upcomingEvents.length > 0 ? (
           <Animated.View style={[styles.section, eventsAnim]}>
             <View style={styles.sectionHeader}>
@@ -205,6 +313,7 @@ export default function DashboardScreen() {
           </Animated.View>
         ) : null}
 
+        {/* Transactions */}
         <Animated.View style={[styles.section, txnsAnim]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Transaksi Terbaru</Text>
@@ -237,25 +346,19 @@ export default function DashboardScreen() {
   );
 }
 
-const QUICK_ACTIONS = [
-  { id: 'add', label: 'Tambah', icon: 'add-circle', color: Colors.primary, route: '/add-transaction' },
-  { id: 'accounts', label: 'Akun', icon: 'account-balance-wallet', color: Colors.gold, route: '/accounts' },
-  { id: 'analytics', label: 'Analitik', icon: 'analytics', color: Colors.cyan, route: '/analytics' },
-  { id: 'goals', label: 'Tujuan', icon: 'savings', color: Colors.success, route: '/goals' },
-];
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
   scroll: { flex: 1 },
   content: { gap: Spacing.xl, paddingBottom: Spacing.xxl },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.base, paddingTop: Spacing.md },
   greeting: { fontSize: Typography.lg, fontWeight: Typography.bold, color: Colors.text },
-  subtitle: { fontSize: Typography.xs, color: Colors.textMuted, marginTop: 2 },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: 3 },
+  subtitle: { fontSize: Typography.xs, color: Colors.textMuted },
   headerActions: { flexDirection: 'row', gap: Spacing.sm },
   iconBtn: { width: 40, height: 40, backgroundColor: Colors.card, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: Colors.border },
   quickActions: { flexDirection: 'row', paddingHorizontal: Spacing.base, gap: Spacing.sm },
-  quickAction: { flex: 1, alignItems: 'center', gap: Spacing.xs, backgroundColor: Colors.card, borderRadius: Radius.lg, paddingVertical: Spacing.md, borderWidth: 1, borderColor: Colors.border },
-  pressed: { opacity: 0.7, transform: [{ scale: 0.97 }] },
+  quickAction: { alignItems: 'center', gap: Spacing.xs, backgroundColor: Colors.card, borderRadius: Radius.lg, paddingVertical: Spacing.md, borderWidth: 1, borderColor: Colors.border },
+  pressed: { opacity: 0.65, transform: [{ scale: 0.93 }] },
   quickIcon: { width: 42, height: 42, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   quickLabel: { fontSize: Typography.xs, color: Colors.textSecondary, fontWeight: Typography.medium },
   statsRow: { flexDirection: 'row', paddingHorizontal: Spacing.base, gap: Spacing.md },
@@ -282,5 +385,5 @@ const styles = StyleSheet.create({
   separator: { height: 1, backgroundColor: Colors.borderSubtle, marginHorizontal: Spacing.base },
   bottomPad: { height: Spacing.lg },
   fab: { position: 'absolute', bottom: 90, right: Spacing.base, width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', shadowColor: Colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
-  fabPressed: { transform: [{ scale: 0.93 }], opacity: 0.85 },
+  fabPressed: { transform: [{ scale: 0.88 }], opacity: 0.85 },
 });

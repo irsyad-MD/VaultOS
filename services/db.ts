@@ -234,11 +234,87 @@ export async function toggleHabitCompletion(habitId: string, userId: string, dat
     .single();
 
   if (existing) {
+    // Un-check: remove completion
     await sb().from('habit_completions').delete().eq('habit_id', habitId).eq('completed_date', date);
+    // Recalculate streak after un-check
+    await recalculateStreak(habitId, userId);
     return false;
   } else {
+    // Check: add completion
     await sb().from('habit_completions').insert({ habit_id: habitId, user_id: userId, completed_date: date });
+    // Recalculate streak after check
+    await recalculateStreak(habitId, userId);
     return true;
+  }
+}
+
+// Recalculate streak for a habit based on all completions in DB
+export async function recalculateStreak(habitId: string, userId: string): Promise<{ streak: number; longest_streak: number }> {
+  try {
+    const { data: completions } = await sb()
+      .from('habit_completions')
+      .select('completed_date')
+      .eq('habit_id', habitId)
+      .eq('user_id', userId)
+      .order('completed_date', { ascending: false });
+
+    if (!completions || completions.length === 0) {
+      await sb().from('habits').update({ streak: 0, longest_streak: 0 }).eq('id', habitId);
+      return { streak: 0, longest_streak: 0 };
+    }
+
+    const dates = completions.map((c: { completed_date: string }) => c.completed_date).sort().reverse();
+
+    // Calculate current streak (consecutive days ending today or yesterday)
+    let streak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let checkDate = new Date(today);
+    for (let i = 0; i < dates.length; i++) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (dates.includes(dateStr)) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        // If today is missing, allow starting from yesterday
+        if (i === 0) {
+          checkDate.setDate(checkDate.getDate() - 1);
+          const yesterdayStr = checkDate.toISOString().split('T')[0];
+          if (dates.includes(yesterdayStr)) {
+            streak++;
+            checkDate.setDate(checkDate.getDate() - 1);
+          } else {
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Calculate longest streak
+    let longestStreak = 0;
+    let currentRun = 1;
+    const sortedDates = [...dates].sort();
+    for (let i = 1; i < sortedDates.length; i++) {
+      const prev = new Date(sortedDates[i - 1]);
+      const curr = new Date(sortedDates[i]);
+      const diffDays = (curr.getTime() - prev.getTime()) / 86400000;
+      if (diffDays === 1) {
+        currentRun++;
+      } else {
+        longestStreak = Math.max(longestStreak, currentRun);
+        currentRun = 1;
+      }
+    }
+    longestStreak = Math.max(longestStreak, currentRun, streak);
+
+    await sb().from('habits').update({ streak, longest_streak: longestStreak }).eq('id', habitId);
+    return { streak, longest_streak: longestStreak };
+  } catch (e) {
+    console.log('recalculateStreak error:', e);
+    return { streak: 0, longest_streak: 0 };
   }
 }
 
