@@ -38,6 +38,11 @@ const MENU_SECTIONS = [
   },
 ];
 
+const ACCOUNT_MENU = [
+  { id: 'profile', icon: 'account-circle', label: 'Profil Saya', color: Colors.primary, route: '/profile' },
+  { id: 'settings', icon: 'settings', label: 'Pengaturan', color: Colors.textSecondary, route: '/settings' },
+];
+
 function useFadeSlide(delay = 0) {
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(20);
@@ -176,6 +181,28 @@ export default function MoreScreen() {
 
         {/* Menu Sections */}
         <Animated.View style={menuAnim}>
+          {/* Profile & Settings */}
+          <View style={styles.section}>
+            <Text style={styles.menuSectionTitle}>Akun</Text>
+            <View style={styles.menuCard}>
+              {ACCOUNT_MENU.map((item, idx) => (
+                <React.Fragment key={item.id}>
+                  <Pressable
+                    style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]}
+                    onPress={() => router.push(item.route as any)}
+                  >
+                    <View style={[styles.menuIcon, { backgroundColor: item.color + '20' }]}>
+                      <MaterialIcons name={item.icon as any} size={20} color={item.color} />
+                    </View>
+                    <Text style={styles.menuLabel}>{item.label}</Text>
+                    <MaterialIcons name="chevron-right" size={18} color={Colors.textMuted} />
+                  </Pressable>
+                  {idx < ACCOUNT_MENU.length - 1 ? <View style={styles.menuDivider} /> : null}
+                </React.Fragment>
+              ))}
+            </View>
+          </View>
+
           <View style={styles.section}>
             <Text style={styles.menuSectionTitle}>Kategori</Text>
             <View style={styles.menuCard}>

@@ -203,6 +203,18 @@ export default function RootLayout() {
                     presentation: 'modal',
                   }}
                 />
+                <Stack.Screen
+                  name="profile"
+                  options={{
+                    headerShown: false,
+                  }}
+                />
+                <Stack.Screen
+                  name="settings"
+                  options={{
+                    headerShown: false,
+                  }}
+                />
               </Stack>
             </View>
           </AppProvider>

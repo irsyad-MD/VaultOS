@@ -46,6 +46,7 @@ function LoginContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [whatsappNumber, setWhatsappNumber] = useState('');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -61,6 +62,12 @@ function LoginContent() {
     if (!email || !password) { showAlert('Lengkapi Data', 'Email dan password wajib diisi.'); return; }
     if (password !== confirmPassword) { showAlert('Password Tidak Sama', 'Konfirmasi password tidak cocok.'); return; }
     if (password.length < 6) { showAlert('Password Terlalu Pendek', 'Password minimal 6 karakter.'); return; }
+    if (!whatsappNumber) { showAlert('Nomor WhatsApp Wajib', 'Masukkan nomor WhatsApp aktif kamu.'); return; }
+    const waClean = whatsappNumber.replace(/\D/g, '');
+    if (!/^628\d{8,12}$/.test(waClean)) {
+      showAlert('Format Nomor Salah', 'Gunakan format internasional Indonesia.\nContoh: 6281234567890');
+      return;
+    }
     const { error } = await sendOTP(email);
     if (error) { showAlert('Gagal', error); return; }
     setMode('otp');
@@ -69,8 +76,19 @@ function LoginContent() {
 
   const handleVerifyOTP = async () => {
     if (!otp || otp.length < 6) { showAlert('OTP Tidak Valid', 'Masukkan kode OTP dari email.'); return; }
-    const { error } = await verifyOTPAndLogin(email, otp, { password });
-    if (error) showAlert('Verifikasi Gagal', error);
+    const waClean = whatsappNumber.replace(/\D/g, '');
+    const { error, user } = await verifyOTPAndLogin(email, otp, { password });
+    if (error) { showAlert('Verifikasi Gagal', error); return; }
+    // Save whatsapp_number to user profile
+    if (user) {
+      try {
+        const sb = getSupabaseClient();
+        await sb.from('user_profiles').update({ whatsapp_number: waClean }).eq('id', user.id);
+        await sb.auth.updateUser({ data: { whatsapp_number: waClean } });
+      } catch (e) {
+        console.log('WA number save error:', e);
+      }
+    }
   };
 
   // ── Forgot password flow ──────────────────────────────────────────────────────
@@ -297,20 +315,38 @@ function LoginContent() {
         </View>
 
         {mode === 'register' ? (
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Konfirmasi Password</Text>
-            <View style={styles.inputWrap}>
-              <MaterialIcons name="lock-outline" size={18} color={Colors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Ulangi password"
-                placeholderTextColor={Colors.textDisabled}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-              />
+          <>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Konfirmasi Password</Text>
+              <View style={styles.inputWrap}>
+                <MaterialIcons name="lock-outline" size={18} color={Colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ulangi password"
+                  placeholderTextColor={Colors.textDisabled}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                />
+              </View>
             </View>
-          </View>
+            <View style={styles.fieldGroup}>
+              <Text style={styles.fieldLabel}>Nomor WhatsApp</Text>
+              <View style={styles.inputWrap}>
+                <MaterialIcons name="whatsapp" size={18} color={Colors.success} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="628xxxxxxxxxx"
+                  placeholderTextColor={Colors.textDisabled}
+                  value={whatsappNumber}
+                  onChangeText={setWhatsappNumber}
+                  keyboardType="phone-pad"
+                  maxLength={15}
+                />
+              </View>
+              <Text style={styles.fieldHint}>Format internasional Indonesia, contoh: 6281234567890</Text>
+            </View>
+          </>
         ) : null}
 
         {mode === 'login' ? (
@@ -494,6 +530,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start', borderWidth: 1, borderColor: Colors.warning + '40',
   },
   forgotBadgeText: { fontSize: Typography.xs, color: Colors.warning, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
+  fieldHint: { fontSize: Typography.xs, color: Colors.textDisabled, paddingLeft: 2 },
   fieldGroup: { gap: Spacing.sm },
   fieldLabel: {
     fontSize: Typography.xs, color: Colors.textMuted,
