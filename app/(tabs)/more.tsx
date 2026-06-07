@@ -40,7 +40,6 @@ const MENU_SECTIONS = [
 
 const ACCOUNT_MENU = [
   { id: 'profile', icon: 'account-circle', label: 'Profil Saya', color: Colors.primary, route: '/profile' },
-  { id: 'settings', icon: 'settings', label: 'Pengaturan', color: Colors.textSecondary, route: '/settings' },
 ];
 
 function useFadeSlide(delay = 0) {
